@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Library Column Indexer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --border: #e5e7eb;
+      --text: #111827;
+      --muted: #6b7280;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --blue: #2563eb;
+    }
+    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      margin: 0;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* Top Bar */
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      z-index: 20;
+    }
+    .title-group h1 { font-size: 16px; margin: 0; }
+    .legend {
+      display: flex;
+      gap: 10px;
+      font-size: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px;
+    }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    button {
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 38px;
+    }
+    button.primary {
+      background: var(--blue);
+      color: white;
+      border-color: var(--blue);
+    }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Workspace Layout */
+    .workspace {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Map Area */
+    #mapWrapper {
+      flex: 1;
+      overflow: auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 16px;
+      touch-action: pan-x pan-y pinch-zoom;
+    }
+    #mapWrapper svg {
+      max-width: 100%;
+      max-height: 100%;
+      height: auto;
+      background: white;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+
+    /* Column Map States */
+    .col-node { cursor: pointer; transition: opacity 0.15s; }
+    .col-node:hover { opacity: 0.8; }
+
+    .col-complete, .col-complete * { fill: #22c55e !important; stroke: #15803d !important; }
+    .col-partial, .col-partial *   { fill: #facc15 !important; stroke: #a16207 !important; }
+    .col-conflict, .col-conflict * { fill: #ef4444 !important; stroke: #991b1b !important; }
+    .col-selected, .col-selected * { stroke: #2563eb !important; stroke-width: 3px !important; }
+
+    /* Side Drawer (Desktop) / Bottom Sheet (Mobile) */
+    #drawer {
+      width: 440px;
+      max-width: 100%;
+      background: var(--card);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 30;
+      box-shadow: -4px 0 20px rgba(0,0,0,0.08);
+      transition: transform 0.25s ease;
+    }
+    #drawer.hidden { display: none; }
+
+    .drawer-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .drawer-header h2 { margin: 0; font-size: 18px; }
+    .drawer-sub { font-size: 12px; color: var(--muted); }
+
+    .shelf-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .shelf-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fafafa;
+    }
+    .shelf-card.verified { background: #f0fdf4; border-color: #86efac; }
+    .shelf-card.conflict { background: #fef2f2; border-color: #fca5a5; }
+    .shelf-card.waiting  { background: #fefce8; border-color: #fde047; }
+
+    .shelf-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .shelf-title { font-weight: 700; font-size: 14px; }
+    .pill {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e5e7eb;
+    }
+    .pill.verified { background: #dcfce7; color: #166534; }
+    .pill.conflict { background: #fee2e2; color: #991b1b; }
+    .pill.waiting  { background: #fef9c3; color: #854d0e; }
+
+    .conflict-hint {
+      font-size: 12px;
+      color: #991b1b;
+      background: #fee2e2;
+      padding: 6px 8px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .inputs-row {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .inputs-row input {
+      padding: 9px 6px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 15px;
+      font-family: monospace;
+      text-align: center;
+    }
+    .inputs-row input.code-in {
+      flex: 2;
+      min-width: 78px;
+    }
+    .inputs-row input.vol-in {
+      flex: 1;
+      min-width: 44px;
+      max-width: 58px;
+      background: #f9fafb;
+    }
+    .inputs-row input:disabled {
+      background: #e5e7eb;
+      color: #6b7280;
+    }
+
+    .mode-toggles {
+      display: flex;
+      gap: 6px;
+    }
+    .mode-btn {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 12px;
+      min-height: 34px;
+      background: white;
+    }
+    .mode-btn.active {
+      background: #1f2937;
+      color: white;
+      border-color: #1f2937;
+    }
+
+    .drawer-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+    }
+    .drawer-footer button { flex: 1; min-height: 44px; font-size: 15px; }
+
+    @media (max-width: 768px) {
+      #drawer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 72dvh;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        border-radius: 16px 16px 0 0;
+        box-shadow: 0 -6px 24px rgba(0,0,0,0.15);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1>Library Map Indexer</h1>
+      <div class="legend">
+        <span><i class="dot" style="background:#d1d5db"></i>Unmapped</span>
+        <span><i class="dot" style="background:#eab308"></i>In Progress / Needs 2nd Check</span>
+        <span><i class="dot" style="background:#ef4444"></i>Conflict</span>
+        <span><i class="dot" style="background:#22c55e"></i>Verified (2x)</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span id="globalStats" style="font-size:13px; color:var(--muted);">Loading...</span>
+      <button id="exportJsonBtn">Export Verified JSON</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <main id="mapWrapper"></main>
+
+    <aside id="drawer" class="hidden">
+      <div class="drawer-header">
+        <div>
+          <h2 id="drawerTitle">Column —</h2>
+          <div id="drawerSub" class="drawer-sub">1 = top shelf; Vol is optional</div>
+        </div>
+        <button id="closeDrawerBtn" style="min-height:34px;">✕</button>
+      </div>
+
+      <div id="shelfList" class="shelf-list"></div>
+
+      <div class="drawer-footer">
+        <button id="submitColumnBtn" class="primary">Submit Column</button>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. SUPABASE CONFIGURATION (Replace with your Supabase URL & anon key)
+    // =========================================================================
+    const SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co/rest/v1/";
+    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIMflO";
+    const SVG_FILENAME = "libary_map.svg";
+
+    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let sessionId = localStorage.getItem("lib_indexer_session");
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem("lib_indexer_session", sessionId);
+    }
+
+    const colRegex = /^([a-zA-Z]+)\d+(_\d+)?$/;
+    const columns = new Map();
+    let allSubmissions = [];
+    let activeColId = null;
+
+    const mapWrapper = document.getElementById("mapWrapper");
+    const drawer = document.getElementById("drawer");
+    const drawerTitle = document.getElementById("drawerTitle");
+    const drawerSub = document.getElementById("drawerSub");
+    const shelfList = document.getElementById("shelfList");
+    const submitColumnBtn = document.getElementById("submitColumnBtn");
+    const globalStats = document.getElementById("globalStats");
+
+    // Columns d, e, f, g have 3 shelves; all other letters have 5 shelves
+    function getShelfCountForLetter(letter) {
+      return ["d", "e", "f", "g"].includes(letter.toLowerCase()) ? 3 : 5;
+    }
+
+    function formatBoundLabel(row) {
+      if (row.status !== "indexed") return row.status.toUpperCase();
+      const sVol = row.start_vol ? ` (v.${row.start_vol})` : "";
+      const eVol = row.end_vol ? ` (v.${row.end_vol})` : "";
+      return `${row.start_code}${sVol} – ${row.end_code}${eVol}`;
+    }
+
+    // 2. Load SVG Map
+    async function init() {
+      const res = await fetch(SVG_FILENAME);
+      const svgText = await res.text();
+      mapWrapper.innerHTML = svgText;
+
+      mapWrapper.querySelectorAll("svg [id]").forEach((el) => {
+        const cleanId = el.id.trim();
+        const match = cleanId.match(colRegex);
+        if (match) {
+          const letter = match[1];
+          columns.set(cleanId, {
+            id: cleanId,
+            letter,
+            shelfCount: getShelfCountForLetter(letter),
+            el,
+          });
+          el.classList.add("col-node");
+          el.style.pointerEvents = "all";
+          el.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openColumnDrawer(cleanId);
+          });
+        }
+      });
+
+      await fetchSubmissions();
+
+      db.channel("public:shelf_submissions")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "shelf_submissions" }, (payload) => {
+          allSubmissions.push(payload.new);
+          refreshMapColors();
+        })
+        .subscribe();
+    }
+
+    async function fetchSubmissions() {
+      const { data, error } = await db
+        .from("shelf_submissions")
+        .select("*")
+        .order("created_at", { ascending: true });
+
+      if (!error && data) {
+        allSubmissions = data;
+        refreshMapColors();
+      }
+    }
+
+    // 3. Consensus Evaluation per Shelf (includes volume numbers)
+    function evaluateShelf(colId, shelfNum) {
+      const subs = allSubmissions.filter(
+        (s) => s.column_id === colId && s.shelf_num === shelfNum
+      );
+
+      if (subs.length === 0) {
+        return { state: "unmapped", subs };
+      }
+
+      const counts = new Map();
+      const canonical = new Map();
+      for (const s of subs) {
+        const sig = s.status === "indexed"
+          ? `indexed|${s.start_code}|${s.start_vol || 0}|${s.end_code}|${s.end_vol || 0}`
+          : s.status;
+        counts.set(sig, (counts.get(sig) || 0) + 1);
+        canonical.set(sig, s);
+      }
+
+      for (const [sig, count] of counts.entries()) {
+        if (count >= 2) {
+          return { state: "verified", value: canonical.get(sig), subs };
+        }
+      }
+
+      if (subs.length === 1) {
+        const alreadySubmittedByMe = subs[0].session_id === sessionId;
+        return { state: "waiting", alreadySubmittedByMe, subs };
+      }
+
+      return { state: "conflict", options: Array.from(canonical.values()), subs };
+    }
+
+    // 4. Update Map Colors based on Column Aggregation
+    function refreshMapColors() {
+      let verifiedCols = 0;
+
+      columns.forEach((col) => {
+        const states = [];
+        for (let i = 1; i <= col.shelfCount; i++) {
+          states.push(evaluateShelf(col.id, i).state);
+        }
+
+        col.el.classList.remove("col-complete", "col-partial", "col-conflict");
+
+        if (states.includes("conflict")) {
+          col.el.classList.add("col-conflict");
+        } else if (states.every((st) => st === "verified")) {
+          col.el.classList.add("col-complete");
+          verifiedCols++;
+        } else if (states.some((st) => st !== "unmapped")) {
+          col.el.classList.add("col-partial");
+        }
+      });
+
+      globalStats.textContent = `${verifiedCols} / ${columns.size} columns verified`;
+    }
+
+    function formatDewey(raw) {
+      let val = raw.trim();
+      if (!val.includes(".") && /^\d{4,}/.test(val)) {
+        val = val.slice(0, 3) + "." + val.slice(3);
+      }
+      return val;
+    }
+
+    // 6. Open Drawer for Selected Column
+    function openColumnDrawer(colId) {
+      if (activeColId && columns.has(activeColId)) {
+        columns.get(activeColId).el.classList.remove("col-selected");
+      }
+
+      activeColId = colId;
+      const col = columns.get(colId);
+      col.el.classList.add("col-selected");
+
+      drawerTitle.textContent = `Column ${colId.toUpperCase()}`;
+      drawerSub.textContent = `${col.shelfCount} shelves (1 = top; leave Vol empty if single volume)`;
+      shelfList.innerHTML = "";
+
+      for (let num = 1; num <= col.shelfCount; num++) {
+        const evalRes = evaluateShelf(colId, num);
+        const card = document.createElement("div");
+        card.className = `shelf-card ${evalRes.state}`;
+        card.dataset.shelfNum = num;
+        card.dataset.mode = "indexed";
+
+        let badgeText = "Unmapped";
+        if (evalRes.state === "verified") badgeText = "Verified ✓";
+        if (evalRes.state === "waiting") badgeText = evalRes.alreadySubmittedByMe ? "Saved (awaiting 2nd)" : "Needs 2nd check";
+        if (evalRes.state === "conflict") badgeText = "Conflict — tie-breaker needed";
+
+        let extraHtml = "";
+        if (evalRes.state === "conflict") {
+          const labels = evalRes.options.map((o) => formatBoundLabel(o));
+          extraHtml = `<div class="conflict-hint">Entries disagree: <strong>${labels.join(" vs. ")}</strong>. Check the shelf and enter the true value.</div>`;
+        }
+
+        card.innerHTML = `
+          <div class="shelf-top">
+            <span class="shelf-title">Shelf ${num}</span>
+            <span class="pill ${evalRes.state}">${badgeText}</span>
+          </div>
+          ${extraHtml}
+          <div class="inputs-row">
+            <input type="text" inputmode="decimal" class="code-in start-in" placeholder="Left 503.42" autocomplete="off" />
+            <input type="number" inputmode="numeric" min="1" class="vol-in start-vol-in" placeholder="Vol" autocomplete="off" />
+            <span>–</span>
+            <input type="text" inputmode="decimal" class="code-in end-in" placeholder="Right 503.89" autocomplete="off" />
+            <input type="number" inputmode="numeric" min="1" class="vol-in end-vol-in" placeholder="Vol" autocomplete="off" />
+          </div>
+          <div class="mode-toggles">
+            <button type="button" class="mode-btn active" data-set="indexed">Range</button>
+            <button type="button" class="mode-btn" data-set="empty">Empty Shelf</button>
+            <button type="button" class="mode-btn" data-set="unindexed">Unindexed Books</button>
+          </div>
+        `;
+
+        const startIn = card.querySelector(".start-in");
+        const startVolIn = card.querySelector(".start-vol-in");
+        const endIn = card.querySelector(".end-in");
+        const endVolIn = card.querySelector(".end-vol-in");
+        const modeBtns = card.querySelectorAll(".mode-btn");
+        const allInputs = [startIn, startVolIn, endIn, endVolIn];
+
+        if (evalRes.state === "verified" || (evalRes.state === "waiting" && evalRes.alreadySubmittedByMe)) {
+          card.dataset.mode = "skip";
+          allInputs.forEach((inp) => (inp.disabled = true));
+          modeBtns.forEach((b) => (b.disabled = true));
+          if (evalRes.state === "verified" && evalRes.value.status === "indexed") {
+            startIn.value = evalRes.value.start_code;
+            startVolIn.value = evalRes.value.start_vol || "";
+            endIn.value = evalRes.value.end_code;
+            endVolIn.value = evalRes.value.end_vol || "";
+          } else if (evalRes.state === "verified") {
+            startIn.placeholder = evalRes.value.status.toUpperCase();
+            endIn.placeholder = "";
+          }
+        }
+
+        modeBtns.forEach((btn) => {
+          btn.addEventListener("click", () => {
+            modeBtns.forEach((b) => b.classList.remove("active"));
+            btn.classList.add("active");
+            const mode = btn.dataset.set;
+            card.dataset.mode = mode;
+
+            if (mode === "indexed") {
+              allInputs.forEach((inp) => (inp.disabled = false));
+              startIn.focus();
+            } else {
+              allInputs.forEach((inp) => {
+                inp.disabled = true;
+                inp.value = "";
+              });
+              focusNextShelf(num);
+            }
+          });
+        });
+
+        // Auto-decimal & 5-digit auto-jump on Start input
+        let endEdited = false;
+        startIn.addEventListener("input", () => {
+          const fmt = formatDewey(startIn.value);
+          if (startIn.value !== fmt) startIn.value = fmt;
+
+          if (!endEdited) {
+            const dot = fmt.indexOf(".");
+            endIn.value = dot !== -1 ? fmt.slice(0, dot + 1) : fmt;
+          }
+
+          const digits = (fmt.match(/\d/g) || []).length;
+          if (digits >= 5) {
+            endIn.focus();
+            endIn.setSelectionRange(endIn.value.length, endIn.value.length);
+          }
+        });
+
+        // Auto-decimal & 5-digit auto-jump to NEXT shelf on End input
+        endIn.addEventListener("input", () => {
+          endEdited = true;
+          const fmt = formatDewey(endIn.value);
+          if (endIn.value !== fmt) endIn.value = fmt;
+
+          const digits = (fmt.match(/\d/g) || []).length;
+          if (digits >= 5) {
+            focusNextShelf(num);
+          }
+        });
+
+        // Enter key chaining
+        startIn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
+        });
+        startVolIn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
+        });
+        endIn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); focusNextShelf(num); }
+        });
+        endVolIn.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") { e.preventDefault(); focusNextShelf(num); }
+        });
+
+        shelfList.appendChild(card);
+      }
+
+      drawer.classList.remove("hidden");
+
+      const firstInput = shelfList.querySelector(".start-in:not(:disabled)");
+      if (firstInput) firstInput.focus();
+    }
+
+    function focusNextShelf(currentNum) {
+      const nextCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum + 1}"]`);
+      if (nextCard) {
+        const nextStartIn = nextCard.querySelector(".start-in:not(:disabled)");
+        const nextStartVolIn = nextCard.querySelector(".start-vol-in:not(:disabled)");
+        if (nextStartIn) {
+          const prevCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum}"]`);
+          const prevEndCode = prevCard.querySelector(".end-in").value.trim();
+          const prevEndVol = parseInt(prevCard.querySelector(".end-vol-in").value, 10);
+
+          // If previous shelf ended mid-set on a volume number (e.g. 503.42 Vol 6),
+          // carry over the exact book code (503.42) and increment volume to 7!
+          if (prevEndCode && !isNaN(prevEndVol) && prevEndVol > 0) {
+            if (!nextStartIn.value) nextStartIn.value = prevEndCode;
+            if (nextStartVolIn && !nextStartVolIn.value) nextStartVolIn.value = prevEndVol + 1;
+            const nextEndIn = nextCard.querySelector(".end-in");
+            const dot = prevEndCode.indexOf(".");
+            if (nextEndIn && !nextEndIn.value && dot !== -1) {
+              nextEndIn.value = prevEndCode.slice(0, dot + 1);
+            }
+            nextEndIn.focus();
+            nextEndIn.setSelectionRange(nextEndIn.value.length, nextEndIn.value.length);
+            return;
+          }
+
+          // Otherwise carry over the 3-digit integer prefix (e.g. "503.")
+          const dot = prevEndCode.indexOf(".");
+          if (dot !== -1 && !nextStartIn.value) {
+            nextStartIn.value = prevEndCode.slice(0, dot + 1);
+          }
+          nextStartIn.focus();
+          nextStartIn.setSelectionRange(nextStartIn.value.length, nextStartIn.value.length);
+          return;
+        }
+      }
+      submitColumnBtn.focus();
+    }
+
+    document.getElementById("closeDrawerBtn").addEventListener("click", () => {
+      drawer.classList.add("hidden");
+      if (activeColId && columns.has(activeColId)) {
+        columns.get(activeColId).el.classList.remove("col-selected");
+      }
+      activeColId = null;
+    });
+
+    // 7. Submit Filled Shelves to Supabase
+    submitColumnBtn.addEventListener("click", async () => {
+      if (!activeColId) return;
+      const cards = shelfList.querySelectorAll(".shelf-card");
+      const rowsToInsert = [];
+
+      for (const card of cards) {
+        const mode = card.dataset.mode;
+        if (mode === "skip") continue;
+
+        const shelfNum = parseInt(card.dataset.shelfNum, 10);
+        if (mode === "indexed") {
+          const start = card.querySelector(".start-in").value.trim();
+          const end = card.querySelector(".end-in").value.trim();
+          const startVolRaw = card.querySelector(".start-vol-in").value.trim();
+          const endVolRaw = card.querySelector(".end-vol-in").value.trim();
+
+          if (!start && !end) continue;
+          if (!start || !end) {
+            alert(`Shelf ${shelfNum}: Please enter both Left and Right codes, or mark it Empty/Unindexed.`);
+            return;
+          }
+
+          const startVol = startVolRaw ? parseInt(startVolRaw, 10) : null;
+          const endVol = endVolRaw ? parseInt(endVolRaw, 10) : null;
+
+          rowsToInsert.push({
+            column_id: activeColId,
+            shelf_num: shelfNum,
+            status: "indexed",
+            start_code: start,
+            start_vol: startVol,
+            end_code: end,
+            end_vol: endVol,
+            session_id: sessionId,
+          });
+        } else {
+          rowsToInsert.push({
+            column_id: activeColId,
+            shelf_num: shelfNum,
+            status: mode,
+            start_code: null,
+            start_vol: null,
+            end_code: null,
+            end_vol: null,
+            session_id: sessionId,
+          });
+        }
+      }
+
+      if (rowsToInsert.length === 0) {
+        alert("No new shelf entries to submit.");
+        return;
+      }
+
+      submitColumnBtn.disabled = true;
+      submitColumnBtn.textContent = "Saving...";
+
+      const { error } = await db.from("shelf_submissions").insert(rowsToInsert);
+
+      submitColumnBtn.disabled = false;
+      submitColumnBtn.textContent = "Submit Column";
+
+      if (error) {
+        alert("Error saving: " + error.message);
+      } else {
+        await fetchSubmissions();
+        openColumnDrawer(activeColId);
+      }
+    });
+
+    // 8. Export Verified JSON
+    document.getElementById("exportJsonBtn").addEventListener("click", () => {
+      const verifiedShelves = [];
+      columns.forEach((col) => {
+        for (let num = 1; num <= col.shelfCount; num++) {
+          const res = evaluateShelf(col.id, num);
+          if (res.state === "verified" && res.value.status === "indexed") {
+            verifiedShelves.push({
+              column_id: col.id,
+              shelf_num: num,
+              start: res.value.start_code,
+              start_vol: res.value.start_vol || null,
+              end: res.value.end_code,
+              end_vol: res.value.end_vol || null,
+            });
+          }
+        }
+      });
+
+      verifiedShelves.sort((a, b) =>
+        a.column_id.localeCompare(b.column_id, undefined, { numeric: true }) || a.shelf_num - b.shelf_num
+      );
+
+      const blob = new Blob([JSON.stringify(verifiedShelves, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "verified_library_shelves.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    init();
+  </script>
+</body>
+</html>
