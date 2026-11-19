@@ -40,7 +40,7 @@
       flex-wrap: wrap;
       z-index: 20;
     }
-    .title-group h1 { font-size: 16px; margin: 0; }
+    .title-group h1 { font-size: 16px; margin: 0 0 4px 0; }
     .legend {
       display: flex;
       gap: 10px;
@@ -51,7 +51,7 @@
     .dot {
       width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px;
     }
-    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     button {
       border: 1px solid var(--border);
       background: var(--card);
@@ -61,7 +61,7 @@
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
-      min-height: 38px;
+      min-height: 36px;
     }
     button.primary {
       background: var(--blue);
@@ -107,7 +107,7 @@
 
     /* Side Drawer (Desktop) / Bottom Sheet (Mobile) */
     #drawer {
-      width: 440px;
+      width: 450px;
       max-width: 100%;
       background: var(--card);
       border-left: 1px solid var(--border);
@@ -120,7 +120,7 @@
     #drawer.hidden { display: none; }
 
     .drawer-header {
-      padding: 14px 16px;
+      padding: 12px 16px;
       border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
@@ -128,6 +128,29 @@
     }
     .drawer-header h2 { margin: 0; font-size: 18px; }
     .drawer-sub { font-size: 12px; color: var(--muted); }
+
+    /* Entry Granularity Switcher */
+    .granularity-bar {
+      display: flex;
+      gap: 6px;
+      padding: 10px 16px;
+      background: #f9fafb;
+      border-bottom: 1px solid var(--border);
+    }
+    .gran-btn {
+      flex: 1;
+      padding: 7px 10px;
+      font-size: 13px;
+      border-radius: 8px;
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .gran-btn.active {
+      background: var(--blue);
+      color: white;
+      border-color: var(--blue);
+    }
 
     .shelf-list {
       flex: 1;
@@ -153,6 +176,7 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
+      gap: 6px;
     }
     .shelf-title { font-weight: 700; font-size: 14px; }
     .pill {
@@ -179,7 +203,7 @@
       display: flex;
       gap: 5px;
       align-items: center;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .inputs-row input {
       padding: 9px 6px;
@@ -203,6 +227,17 @@
       background: #e5e7eb;
       color: #6b7280;
     }
+
+    .catalog-feedback {
+      font-size: 11px;
+      color: var(--muted);
+      min-height: 15px;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .cat-ok { color: #15803d; font-weight: 600; }
+    .cat-warn { color: #b45309; }
 
     .mode-toggles {
       display: flex;
@@ -236,7 +271,7 @@
         right: 0;
         bottom: 0;
         width: 100%;
-        height: 72dvh;
+        height: 75dvh;
         border-left: none;
         border-top: 1px solid var(--border);
         border-radius: 16px 16px 0 0;
@@ -252,13 +287,14 @@
       <h1>Library Map Indexer</h1>
       <div class="legend">
         <span><i class="dot" style="background:#d1d5db"></i>Unmapped</span>
-        <span><i class="dot" style="background:#eab308"></i>In Progress / Needs 2nd Check</span>
+        <span><i class="dot" style="background:#eab308"></i>Partial / Edges Only / 1st Check</span>
         <span><i class="dot" style="background:#ef4444"></i>Conflict</span>
-        <span><i class="dot" style="background:#22c55e"></i>Verified (2x)</span>
+        <span><i class="dot" style="background:#22c55e"></i>Full Column Verified</span>
       </div>
     </div>
     <div class="header-actions">
-      <span id="globalStats" style="font-size:13px; color:var(--muted);">Loading...</span>
+      <span id="catalogStatus" style="font-size:12px; color:var(--muted);">Catalog: loading...</span>
+      <span id="globalStats" style="font-size:13px; color:var(--muted);">Map: loading...</span>
       <button id="exportJsonBtn">Export Verified JSON</button>
     </div>
   </header>
@@ -275,6 +311,11 @@
         <button id="closeDrawerBtn" style="min-height:34px;">✕</button>
       </div>
 
+      <div class="granularity-bar">
+        <button type="button" id="modeShelvesBtn" class="gran-btn active">Shelf-by-Shelf (1–5)</button>
+        <button type="button" id="modeEdgesBtn" class="gran-btn">Column Edges Only (Top & Bottom)</button>
+      </div>
+
       <div id="shelfList" class="shelf-list"></div>
 
       <div class="drawer-footer">
@@ -285,13 +326,15 @@
 
   <script>
     // =========================================================================
-    // 1. SUPABASE CONFIGURATION (Replace with your Supabase URL & anon key)
+    // 1. SUPABASE CONFIGURATION (Normalized automatically to avoid /rest/v1/ error)
     // =========================================================================
-    const SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co/rest/v1/";
-    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIMflO";
+    const RAW_SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIM"; // <-- Replace with full key if truncated
     const SVG_FILENAME = "libary_map.svg";
+    const CATALOG_FILENAME = "catalog_index.json";
 
-    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const cleanSupabaseUrl = RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
+    const db = window.supabase.createClient(cleanSupabaseUrl, SUPABASE_ANON_KEY.trim());
 
     let sessionId = localStorage.getItem("lib_indexer_session");
     if (!sessionId) {
@@ -302,7 +345,9 @@
     const colRegex = /^([a-zA-Z]+)\d+(_\d+)?$/;
     const columns = new Map();
     let allSubmissions = [];
+    let catalog = []; // Sorted [{ code: "104.20", vol: 2 }, ...]
     let activeColId = null;
+    let drawerGranularity = "shelves"; // "shelves" | "edges"
 
     const mapWrapper = document.getElementById("mapWrapper");
     const drawer = document.getElementById("drawer");
@@ -311,8 +356,10 @@
     const shelfList = document.getElementById("shelfList");
     const submitColumnBtn = document.getElementById("submitColumnBtn");
     const globalStats = document.getElementById("globalStats");
+    const catalogStatus = document.getElementById("catalogStatus");
+    const modeShelvesBtn = document.getElementById("modeShelvesBtn");
+    const modeEdgesBtn = document.getElementById("modeEdgesBtn");
 
-    // Columns d, e, f, g have 3 shelves; all other letters have 5 shelves
     function getShelfCountForLetter(letter) {
       return ["d", "e", "f", "g"].includes(letter.toLowerCase()) ? 3 : 5;
     }
@@ -324,11 +371,86 @@
       return `${row.start_code}${sVol} – ${row.end_code}${eVol}`;
     }
 
-    // 2. Load SVG Map
+    // =========================================================================
+    // 2. CATALOG BINARY SEARCH & NEXT-BOOK PREDICTION
+    // =========================================================================
+    async function loadCatalog() {
+      try {
+        const res = await fetch(CATALOG_FILENAME);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        catalog = await res.json();
+        catalogStatus.textContent = `Catalog: ${catalog.length.toLocaleString()} items`;
+      } catch (err) {
+        catalog = [];
+        catalogStatus.textContent = "Catalog: offline";
+      }
+    }
+
+    function compareTuple(aCode, aVol, bCode, bVol) {
+      if (aCode !== bCode) return aCode < bCode ? -1 : 1;
+      const v1 = aVol || 0;
+      const v2 = bVol || 0;
+      return v1 - v2;
+    }
+
+    // Finds exact match index (or best match for code if vol omitted) and returns { exists, nextEntry }
+    function lookupInCatalog(code, vol) {
+      if (!catalog.length || !code) return { exists: false, nextEntry: null };
+      const targetVol = vol || 0;
+
+      // Binary search for lower bound >= (code, targetVol)
+      let lo = 0, hi = catalog.length - 1, idx = -1;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const item = catalog[mid];
+        const cmp = compareTuple(item.code, item.vol || 0, code, targetVol);
+        if (cmp === 0) {
+          idx = mid;
+          break;
+        } else if (cmp < 0) {
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+
+      // If exact (code, 0) wasn't found because the book has volumes (e.g. vol 1, vol 2),
+      // check if any entry starts with that code and take the last volume of that code
+      if (idx === -1 && targetVol === 0) {
+        let lastCodeIdx = -1;
+        for (let i = lo; i < catalog.length && catalog[i].code === code; i++) {
+          lastCodeIdx = i;
+        }
+        if (lastCodeIdx !== -1) {
+          return {
+            exists: true,
+            nextEntry: lastCodeIdx + 1 < catalog.length ? catalog[lastCodeIdx + 1] : null,
+          };
+        }
+        return { exists: false, nextEntry: null };
+      }
+
+      if (idx !== -1) {
+        return {
+          exists: true,
+          nextEntry: idx + 1 < catalog.length ? catalog[idx + 1] : null,
+        };
+      }
+      return { exists: false, nextEntry: null };
+    }
+
+    // =========================================================================
+    // 3. LOAD SVG & SUPABASE SUBMISSIONS
+    // =========================================================================
     async function init() {
-      const res = await fetch(SVG_FILENAME);
-      const svgText = await res.text();
-      mapWrapper.innerHTML = svgText;
+      await Promise.all([
+        loadCatalog(),
+        (async () => {
+          const res = await fetch(SVG_FILENAME);
+          const svgText = await res.text();
+          mapWrapper.innerHTML = svgText;
+        })(),
+      ]);
 
       mapWrapper.querySelectorAll("svg [id]").forEach((el) => {
         const cleanId = el.id.trim();
@@ -366,13 +488,15 @@
         .select("*")
         .order("created_at", { ascending: true });
 
-      if (!error && data) {
+      if (error) {
+        console.error("Supabase fetch error:", error);
+      } else if (data) {
         allSubmissions = data;
         refreshMapColors();
       }
     }
 
-    // 3. Consensus Evaluation per Shelf (includes volume numbers)
+    // shelfNum = 0 represents "Column Edges Only"
     function evaluateShelf(colId, shelfNum) {
       const subs = allSubmissions.filter(
         (s) => s.column_id === colId && s.shelf_num === shelfNum
@@ -406,29 +530,31 @@
       return { state: "conflict", options: Array.from(canonical.values()), subs };
     }
 
-    // 4. Update Map Colors based on Column Aggregation
     function refreshMapColors() {
       let verifiedCols = 0;
 
       columns.forEach((col) => {
-        const states = [];
+        const shelfStates = [];
         for (let i = 1; i <= col.shelfCount; i++) {
-          states.push(evaluateShelf(col.id, i).state);
+          shelfStates.push(evaluateShelf(col.id, i).state);
         }
+        const edgeState = evaluateShelf(col.id, 0).state;
 
         col.el.classList.remove("col-complete", "col-partial", "col-conflict");
 
-        if (states.includes("conflict")) {
+        if (shelfStates.includes("conflict") || edgeState === "conflict") {
           col.el.classList.add("col-conflict");
-        } else if (states.every((st) => st === "verified")) {
+        } else if (shelfStates.every((st) => st === "verified")) {
+          // Green only when every individual shelf in the column is double-verified
           col.el.classList.add("col-complete");
           verifiedCols++;
-        } else if (states.some((st) => st !== "unmapped")) {
+        } else if (shelfStates.some((st) => st !== "unmapped") || edgeState !== "unmapped") {
+          // Yellow if partially mapped OR if only Column Edges (shelf_num=0) were entered
           col.el.classList.add("col-partial");
         }
       });
 
-      globalStats.textContent = `${verifiedCols} / ${columns.size} columns verified`;
+      globalStats.textContent = `${verifiedCols} / ${columns.size} columns fully verified`;
     }
 
     function formatDewey(raw) {
@@ -439,7 +565,23 @@
       return val;
     }
 
-    // 6. Open Drawer for Selected Column
+    // =========================================================================
+    // 4. DRAWER RENDERING (Shelves Mode vs. Column Edges Mode)
+    // =========================================================================
+    modeShelvesBtn.addEventListener("click", () => {
+      drawerGranularity = "shelves";
+      modeShelvesBtn.classList.add("active");
+      modeEdgesBtn.classList.remove("active");
+      if (activeColId) renderDrawerCards(activeColId);
+    });
+
+    modeEdgesBtn.addEventListener("click", () => {
+      drawerGranularity = "edges";
+      modeEdgesBtn.classList.add("active");
+      modeShelvesBtn.classList.remove("active");
+      if (activeColId) renderDrawerCards(activeColId);
+    });
+
     function openColumnDrawer(colId) {
       if (activeColId && columns.has(activeColId)) {
         columns.get(activeColId).el.classList.remove("col-selected");
@@ -450,175 +592,272 @@
       col.el.classList.add("col-selected");
 
       drawerTitle.textContent = `Column ${colId.toUpperCase()}`;
-      drawerSub.textContent = `${col.shelfCount} shelves (1 = top; leave Vol empty if single volume)`;
+      renderDrawerCards(colId);
+      drawer.classList.remove("hidden");
+    }
+
+    function renderDrawerCards(colId) {
+      const col = columns.get(colId);
       shelfList.innerHTML = "";
 
-      for (let num = 1; num <= col.shelfCount; num++) {
-        const evalRes = evaluateShelf(colId, num);
-        const card = document.createElement("div");
-        card.className = `shelf-card ${evalRes.state}`;
-        card.dataset.shelfNum = num;
-        card.dataset.mode = "indexed";
-
-        let badgeText = "Unmapped";
-        if (evalRes.state === "verified") badgeText = "Verified ✓";
-        if (evalRes.state === "waiting") badgeText = evalRes.alreadySubmittedByMe ? "Saved (awaiting 2nd)" : "Needs 2nd check";
-        if (evalRes.state === "conflict") badgeText = "Conflict — tie-breaker needed";
-
-        let extraHtml = "";
-        if (evalRes.state === "conflict") {
-          const labels = evalRes.options.map((o) => formatBoundLabel(o));
-          extraHtml = `<div class="conflict-hint">Entries disagree: <strong>${labels.join(" vs. ")}</strong>. Check the shelf and enter the true value.</div>`;
+      if (drawerGranularity === "edges") {
+        drawerSub.textContent = `Quick estimate: Top-left of Shelf 1 to Bottom-right of Shelf ${col.shelfCount}`;
+        shelfList.appendChild(buildCardElement(colId, 0, `Whole Column (${col.shelfCount} shelves)`));
+      } else {
+        drawerSub.textContent = `${col.shelfCount} shelves (1 = top; catalog auto-fills next shelf)`;
+        for (let num = 1; num <= col.shelfCount; num++) {
+          shelfList.appendChild(buildCardElement(colId, num, `Shelf ${num}`));
         }
-
-        card.innerHTML = `
-          <div class="shelf-top">
-            <span class="shelf-title">Shelf ${num}</span>
-            <span class="pill ${evalRes.state}">${badgeText}</span>
-          </div>
-          ${extraHtml}
-          <div class="inputs-row">
-            <input type="text" inputmode="decimal" class="code-in start-in" placeholder="Left 503.42" autocomplete="off" />
-            <input type="number" inputmode="numeric" min="1" class="vol-in start-vol-in" placeholder="Vol" autocomplete="off" />
-            <span>–</span>
-            <input type="text" inputmode="decimal" class="code-in end-in" placeholder="Right 503.89" autocomplete="off" />
-            <input type="number" inputmode="numeric" min="1" class="vol-in end-vol-in" placeholder="Vol" autocomplete="off" />
-          </div>
-          <div class="mode-toggles">
-            <button type="button" class="mode-btn active" data-set="indexed">Range</button>
-            <button type="button" class="mode-btn" data-set="empty">Empty Shelf</button>
-            <button type="button" class="mode-btn" data-set="unindexed">Unindexed Books</button>
-          </div>
-        `;
-
-        const startIn = card.querySelector(".start-in");
-        const startVolIn = card.querySelector(".start-vol-in");
-        const endIn = card.querySelector(".end-in");
-        const endVolIn = card.querySelector(".end-vol-in");
-        const modeBtns = card.querySelectorAll(".mode-btn");
-        const allInputs = [startIn, startVolIn, endIn, endVolIn];
-
-        if (evalRes.state === "verified" || (evalRes.state === "waiting" && evalRes.alreadySubmittedByMe)) {
-          card.dataset.mode = "skip";
-          allInputs.forEach((inp) => (inp.disabled = true));
-          modeBtns.forEach((b) => (b.disabled = true));
-          if (evalRes.state === "verified" && evalRes.value.status === "indexed") {
-            startIn.value = evalRes.value.start_code;
-            startVolIn.value = evalRes.value.start_vol || "";
-            endIn.value = evalRes.value.end_code;
-            endVolIn.value = evalRes.value.end_vol || "";
-          } else if (evalRes.state === "verified") {
-            startIn.placeholder = evalRes.value.status.toUpperCase();
-            endIn.placeholder = "";
-          }
-        }
-
-        modeBtns.forEach((btn) => {
-          btn.addEventListener("click", () => {
-            modeBtns.forEach((b) => b.classList.remove("active"));
-            btn.classList.add("active");
-            const mode = btn.dataset.set;
-            card.dataset.mode = mode;
-
-            if (mode === "indexed") {
-              allInputs.forEach((inp) => (inp.disabled = false));
-              startIn.focus();
-            } else {
-              allInputs.forEach((inp) => {
-                inp.disabled = true;
-                inp.value = "";
-              });
-              focusNextShelf(num);
-            }
-          });
-        });
-
-        // Auto-decimal & 5-digit auto-jump on Start input
-        let endEdited = false;
-        startIn.addEventListener("input", () => {
-          const fmt = formatDewey(startIn.value);
-          if (startIn.value !== fmt) startIn.value = fmt;
-
-          if (!endEdited) {
-            const dot = fmt.indexOf(".");
-            endIn.value = dot !== -1 ? fmt.slice(0, dot + 1) : fmt;
-          }
-
-          const digits = (fmt.match(/\d/g) || []).length;
-          if (digits >= 5) {
-            endIn.focus();
-            endIn.setSelectionRange(endIn.value.length, endIn.value.length);
-          }
-        });
-
-        // Auto-decimal & 5-digit auto-jump to NEXT shelf on End input
-        endIn.addEventListener("input", () => {
-          endEdited = true;
-          const fmt = formatDewey(endIn.value);
-          if (endIn.value !== fmt) endIn.value = fmt;
-
-          const digits = (fmt.match(/\d/g) || []).length;
-          if (digits >= 5) {
-            focusNextShelf(num);
-          }
-        });
-
-        // Enter key chaining
-        startIn.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
-        });
-        startVolIn.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
-        });
-        endIn.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") { e.preventDefault(); focusNextShelf(num); }
-        });
-        endVolIn.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") { e.preventDefault(); focusNextShelf(num); }
-        });
-
-        shelfList.appendChild(card);
       }
-
-      drawer.classList.remove("hidden");
 
       const firstInput = shelfList.querySelector(".start-in:not(:disabled)");
       if (firstInput) firstInput.focus();
     }
 
-    function focusNextShelf(currentNum) {
-      const nextCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum + 1}"]`);
-      if (nextCard) {
-        const nextStartIn = nextCard.querySelector(".start-in:not(:disabled)");
-        const nextStartVolIn = nextCard.querySelector(".start-vol-in:not(:disabled)");
-        if (nextStartIn) {
-          const prevCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum}"]`);
-          const prevEndCode = prevCard.querySelector(".end-in").value.trim();
-          const prevEndVol = parseInt(prevCard.querySelector(".end-vol-in").value, 10);
+    function buildCardElement(colId, shelfNum, titleLabel) {
+      const evalRes = evaluateShelf(colId, shelfNum);
+      const card = document.createElement("div");
+      card.className = `shelf-card ${evalRes.state}`;
+      card.dataset.shelfNum = shelfNum;
+      card.dataset.mode = "indexed";
 
-          // If previous shelf ended mid-set on a volume number (e.g. 503.42 Vol 6),
-          // carry over the exact book code (503.42) and increment volume to 7!
-          if (prevEndCode && !isNaN(prevEndVol) && prevEndVol > 0) {
-            if (!nextStartIn.value) nextStartIn.value = prevEndCode;
-            if (nextStartVolIn && !nextStartVolIn.value) nextStartVolIn.value = prevEndVol + 1;
-            const nextEndIn = nextCard.querySelector(".end-in");
-            const dot = prevEndCode.indexOf(".");
-            if (nextEndIn && !nextEndIn.value && dot !== -1) {
-              nextEndIn.value = prevEndCode.slice(0, dot + 1);
+      let badgeText = "Unmapped";
+      if (evalRes.state === "verified") badgeText = "Verified ✓";
+      if (evalRes.state === "waiting") badgeText = evalRes.alreadySubmittedByMe ? "Saved (awaiting 2nd)" : "Needs 2nd check";
+      if (evalRes.state === "conflict") badgeText = "Conflict — tie-breaker needed";
+
+      let extraHtml = "";
+      if (evalRes.state === "conflict") {
+        const labels = evalRes.options.map((o) => formatBoundLabel(o));
+        extraHtml = `<div class="conflict-hint">Disagreement: <strong>${labels.join(" vs. ")}</strong>. Enter the true value.</div>`;
+      }
+
+      // If in Shelf-by-Shelf mode and Column Edges (shelf_num=0) already exist, show them as a helpful reference
+      if (shelfNum > 0) {
+        const edgeRes = evaluateShelf(colId, 0);
+        if (edgeRes.state === "verified" || edgeRes.state === "waiting") {
+          const sample = edgeRes.value || edgeRes.subs[0];
+          extraHtml += `<div style="font-size:11px; color:#1d4ed8; margin-bottom:6px;">Column edges recorded: <strong>${formatBoundLabel(sample)}</strong></div>`;
+        }
+      }
+
+      card.innerHTML = `
+        <div class="shelf-top">
+          <span class="shelf-title">${titleLabel}</span>
+          <span class="pill ${evalRes.state}">${badgeText}</span>
+        </div>
+        ${extraHtml}
+        <div class="inputs-row">
+          <input type="text" inputmode="decimal" class="code-in start-in" placeholder="Left 503.42" autocomplete="off" />
+          <input type="number" inputmode="numeric" min="1" class="vol-in start-vol-in" placeholder="Vol" autocomplete="off" />
+          <span>–</span>
+          <input type="text" inputmode="decimal" class="code-in end-in" placeholder="Right 503.89" autocomplete="off" />
+          <input type="number" inputmode="numeric" min="1" class="vol-in end-vol-in" placeholder="Vol" autocomplete="off" />
+        </div>
+        <div class="catalog-feedback">
+          <span class="fb-left"></span>
+          <span class="fb-right"></span>
+        </div>
+        <div class="mode-toggles">
+          <button type="button" class="mode-btn active" data-set="indexed">Range</button>
+          <button type="button" class="mode-btn" data-set="empty">Empty</button>
+          <button type="button" class="mode-btn" data-set="unindexed">Unindexed Books</button>
+        </div>
+      `;
+
+      const startIn = card.querySelector(".start-in");
+      const startVolIn = card.querySelector(".start-vol-in");
+      const endIn = card.querySelector(".end-in");
+      const endVolIn = card.querySelector(".end-vol-in");
+      const fbLeft = card.querySelector(".fb-left");
+      const fbRight = card.querySelector(".fb-right");
+      const modeBtns = card.querySelectorAll(".mode-btn");
+      const allInputs = [startIn, startVolIn, endIn, endVolIn];
+
+      if (evalRes.state === "verified" || (evalRes.state === "waiting" && evalRes.alreadySubmittedByMe)) {
+        card.dataset.mode = "skip";
+        allInputs.forEach((inp) => (inp.disabled = true));
+        modeBtns.forEach((b) => (b.disabled = true));
+        if (evalRes.state === "verified" && evalRes.value.status === "indexed") {
+          startIn.value = evalRes.value.start_code;
+          startVolIn.value = evalRes.value.start_vol || "";
+          endIn.value = evalRes.value.end_code;
+          endVolIn.value = evalRes.value.end_vol || "";
+        } else if (evalRes.state === "verified") {
+          startIn.placeholder = evalRes.value.status.toUpperCase();
+          endIn.placeholder = "";
+        }
+      }
+
+      function updateCatalogHints() {
+        if (!catalog.length) return;
+        const sCode = startIn.value.trim();
+        const sVol = parseInt(startVolIn.value, 10) || 0;
+        if (sCode.length >= 6) {
+          const res = lookupInCatalog(sCode, sVol);
+          fbLeft.innerHTML = res.exists ? `<span class="cat-ok">✓ ${sCode} in catalog</span>` : `<span class="cat-warn">? Not in catalog</span>`;
+        } else {
+          fbLeft.textContent = "";
+        }
+
+        const eCode = endIn.value.trim();
+        const eVol = parseInt(endVolIn.value, 10) || 0;
+        if (eCode.length >= 6) {
+          const res = lookupInCatalog(eCode, eVol);
+          if (res.exists && res.nextEntry) {
+            const nxtVol = res.nextEntry.vol ? ` v.${res.nextEntry.vol}` : "";
+            fbRight.innerHTML = `<span class="cat-ok">✓ Next: ${res.nextEntry.code}${nxtVol}</span>`;
+          } else if (res.exists) {
+            fbRight.innerHTML = `<span class="cat-ok">✓ End of catalog</span>`;
+          } else {
+            fbRight.innerHTML = `<span class="cat-warn">? Not in catalog</span>`;
+          }
+        } else {
+          fbRight.textContent = "";
+        }
+      }
+
+      modeBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          modeBtns.forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          const mode = btn.dataset.set;
+          card.dataset.mode = mode;
+
+          if (mode === "indexed") {
+            allInputs.forEach((inp) => (inp.disabled = false));
+            startIn.focus();
+          } else {
+            allInputs.forEach((inp) => {
+              inp.disabled = true;
+              inp.value = "";
+            });
+            fbLeft.textContent = "";
+            fbRight.textContent = "";
+            focusNextShelf(shelfNum);
+          }
+        });
+      });
+
+      // Start input: auto-decimal + 5-digit auto-jump to End input
+      let endEdited = false;
+      startIn.addEventListener("input", () => {
+        const fmt = formatDewey(startIn.value);
+        if (startIn.value !== fmt) startIn.value = fmt;
+
+        if (!endEdited && !endIn.value) {
+          const dot = fmt.indexOf(".");
+          if (dot !== -1) endIn.value = fmt.slice(0, dot + 1);
+        }
+
+        updateCatalogHints();
+
+        const digits = (fmt.match(/\d/g) || []).length;
+        if (digits >= 5) {
+          endIn.focus();
+          endIn.setSelectionRange(endIn.value.length, endIn.value.length);
+        }
+      });
+
+      startVolIn.addEventListener("input", updateCatalogHints);
+
+      // End input: auto-decimal + catalog next-book prediction + 5-digit auto-jump
+      endIn.addEventListener("input", () => {
+        endEdited = true;
+        const fmt = formatDewey(endIn.value);
+        if (endIn.value !== fmt) endIn.value = fmt;
+
+        updateCatalogHints();
+
+        const digits = (fmt.match(/\d/g) || []).length;
+        if (digits >= 5) {
+          focusNextShelf(shelfNum);
+        }
+      });
+
+      endVolIn.addEventListener("input", () => {
+        updateCatalogHints();
+        // If user updates volume on End box, re-sync the predicted Start of the next shelf
+        if (shelfNum > 0) {
+          applyCatalogPredictionToNextShelf(shelfNum);
+        }
+      });
+
+      // Enter key chaining
+      startIn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
+      });
+      startVolIn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
+      });
+      endIn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); focusNextShelf(shelfNum); }
+      });
+      endVolIn.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); focusNextShelf(shelfNum); }
+      });
+
+      return card;
+    }
+
+    function applyCatalogPredictionToNextShelf(currentNum) {
+      const nextCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum + 1}"]`);
+      if (!nextCard) return false;
+
+      const nextStartIn = nextCard.querySelector(".start-in:not(:disabled)");
+      const nextStartVolIn = nextCard.querySelector(".start-vol-in:not(:disabled)");
+      if (!nextStartIn) return false;
+
+      const prevCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum}"]`);
+      const prevEndCode = prevCard.querySelector(".end-in").value.trim();
+      const prevEndVol = parseInt(prevCard.querySelector(".end-vol-in").value, 10) || 0;
+
+      // 1. Try exact next book from catalog_index.json
+      const catRes = lookupInCatalog(prevEndCode, prevEndVol);
+      if (catRes.exists && catRes.nextEntry) {
+        nextStartIn.value = catRes.nextEntry.code;
+        if (nextStartVolIn) {
+          nextStartVolIn.value = catRes.nextEntry.vol ? catRes.nextEntry.vol : "";
+        }
+        nextStartIn.dispatchEvent(new Event("input")); // Updates hints & pre-fills next End prefix
+        return true;
+      }
+
+      // 2. Fallback if not in catalog: carry over multi-volume increment or 3-digit prefix
+      if (prevEndCode && prevEndVol > 0) {
+        nextStartIn.value = prevEndCode;
+        if (nextStartVolIn) nextStartVolIn.value = prevEndVol + 1;
+        nextStartIn.dispatchEvent(new Event("input"));
+        return true;
+      }
+
+      const dot = prevEndCode.indexOf(".");
+      if (dot !== -1 && !nextStartIn.value) {
+        nextStartIn.value = prevEndCode.slice(0, dot + 1);
+      }
+      return false;
+    }
+
+    function focusNextShelf(currentNum) {
+      if (currentNum > 0) {
+        const nextCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum + 1}"]`);
+        if (nextCard) {
+          const nextStartIn = nextCard.querySelector(".start-in:not(:disabled)");
+          if (nextStartIn) {
+            const autoFilled = applyCatalogPredictionToNextShelf(currentNum);
+            if (autoFilled) {
+              // Because next shelf's Start was auto-filled from catalog, jump straight to next shelf's End!
+              const nextEndIn = nextCard.querySelector(".end-in:not(:disabled)");
+              if (nextEndIn) {
+                nextEndIn.focus();
+                nextEndIn.setSelectionRange(nextEndIn.value.length, nextEndIn.value.length);
+                return;
+              }
             }
-            nextEndIn.focus();
-            nextEndIn.setSelectionRange(nextEndIn.value.length, nextEndIn.value.length);
+            nextStartIn.focus();
+            nextStartIn.setSelectionRange(nextStartIn.value.length, nextStartIn.value.length);
             return;
           }
-
-          // Otherwise carry over the 3-digit integer prefix (e.g. "503.")
-          const dot = prevEndCode.indexOf(".");
-          if (dot !== -1 && !nextStartIn.value) {
-            nextStartIn.value = prevEndCode.slice(0, dot + 1);
-          }
-          nextStartIn.focus();
-          nextStartIn.setSelectionRange(nextStartIn.value.length, nextStartIn.value.length);
-          return;
         }
       }
       submitColumnBtn.focus();
@@ -632,7 +871,9 @@
       activeColId = null;
     });
 
-    // 7. Submit Filled Shelves to Supabase
+    // =========================================================================
+    // 5. SUBMIT TO SUPABASE
+    // =========================================================================
     submitColumnBtn.addEventListener("click", async () => {
       if (!activeColId) return;
       const cards = shelfList.querySelectorAll(".shelf-card");
@@ -651,21 +892,18 @@
 
           if (!start && !end) continue;
           if (!start || !end) {
-            alert(`Shelf ${shelfNum}: Please enter both Left and Right codes, or mark it Empty/Unindexed.`);
+            alert(`Row ${shelfNum === 0 ? "Column Edges" : "Shelf " + shelfNum}: Please enter both Left and Right codes, or mark it Empty/Unindexed.`);
             return;
           }
-
-          const startVol = startVolRaw ? parseInt(startVolRaw, 10) : null;
-          const endVol = endVolRaw ? parseInt(endVolRaw, 10) : null;
 
           rowsToInsert.push({
             column_id: activeColId,
             shelf_num: shelfNum,
             status: "indexed",
             start_code: start,
-            start_vol: startVol,
+            start_vol: startVolRaw ? parseInt(startVolRaw, 10) : null,
             end_code: end,
-            end_vol: endVol,
+            end_vol: endVolRaw ? parseInt(endVolRaw, 10) : null,
             session_id: sessionId,
           });
         } else {
@@ -683,7 +921,7 @@
       }
 
       if (rowsToInsert.length === 0) {
-        alert("No new shelf entries to submit.");
+        alert("No new entries to submit.");
         return;
       }
 
@@ -699,20 +937,22 @@
         alert("Error saving: " + error.message);
       } else {
         await fetchSubmissions();
-        openColumnDrawer(activeColId);
+        renderDrawerCards(activeColId);
       }
     });
 
-    // 8. Export Verified JSON
+    // =========================================================================
+    // 6. EXPORT VERIFIED JSON
+    // =========================================================================
     document.getElementById("exportJsonBtn").addEventListener("click", () => {
       const verifiedShelves = [];
       columns.forEach((col) => {
-        for (let num = 1; num <= col.shelfCount; num++) {
+        for (let num = 0; num <= col.shelfCount; num++) {
           const res = evaluateShelf(col.id, num);
           if (res.state === "verified" && res.value.status === "indexed") {
             verifiedShelves.push({
               column_id: col.id,
-              shelf_num: num,
+              shelf_num: num, // 0 = whole column estimate, 1..5 = exact shelf
               start: res.value.start_code,
               start_vol: res.value.start_vol || null,
               end: res.value.end_code,

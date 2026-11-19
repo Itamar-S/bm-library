@@ -90,11 +90,13 @@
   <main id="mapContainer"></main>
 
   <script>
-    const SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co/rest/v1/";
-    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIMflO";
+    const RAW_SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIM"; // <-- Replace with full key if truncated
     const SVG_FILENAME = "libary_map.svg";
 
-    const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const cleanSupabaseUrl = RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
+    const db = window.supabase.createClient(cleanSupabaseUrl, SUPABASE_ANON_KEY.trim());
+
     let verifiedRanges = [];
 
     const bookCodeInput = document.getElementById("bookCodeInput");
@@ -124,7 +126,7 @@
           const r = canonical.get(key);
           verifiedRanges.push({
             column_id: r.column_id,
-            shelf_num: Number(r.shelf_num),
+            shelf_num: Number(r.shelf_num), // 0 = whole column edges, 1..5 = exact shelf
             start: r.start_code,
             start_vol: r.start_vol || 0,
             end: r.end_code,
@@ -142,14 +144,11 @@
       return val;
     }
 
-    // Compound tuple match: (queryCode, queryVol) within [(start, start_vol), (end, end_vol)]
     function matchesShelf(qCode, qVol, shelf) {
-      // Lower bound check
       const afterStart =
         qCode > shelf.start ||
         (qCode === shelf.start && (qVol === 0 || qVol >= shelf.start_vol));
 
-      // Upper bound check (end_vol === 0 means the set finishes on this shelf)
       const beforeEnd =
         qCode < shelf.end ||
         (qCode === shelf.end && (qVol === 0 || shelf.end_vol === 0 || qVol <= shelf.end_vol));
@@ -167,7 +166,11 @@
       const qVolRaw = volInput.value.trim();
       const qVol = qVolRaw ? parseInt(qVolRaw, 10) : 0;
 
-      const matches = verifiedRanges.filter((r) => matchesShelf(qCode, qVol, r));
+      let matches = verifiedRanges.filter((r) => matchesShelf(qCode, qVol, r));
+
+      // If exact shelf-level matches (shelf_num > 0) exist for a column, prefer them over column-edge estimates (shelf_num === 0)
+      const colsWithExactShelves = new Set(matches.filter((m) => m.shelf_num > 0).map((m) => m.column_id));
+      matches = matches.filter((m) => m.shelf_num > 0 || !colsWithExactShelves.has(m.column_id));
 
       resultBanner.style.display = "block";
       if (matches.length === 0) {
@@ -182,7 +185,10 @@
         if (el) el.classList.add("found-column");
         const sVol = m.start_vol ? ` (v.${m.start_vol})` : "";
         const eVol = m.end_vol ? ` (v.${m.end_vol})` : "";
-        return `Column ${m.column_id.toUpperCase()} — Shelf ${m.shelf_num} from top (${m.start}${sVol} – ${m.end}${eVol})`;
+        const shelfLocation = m.shelf_num === 0
+          ? "Anywhere in column"
+          : `Shelf ${m.shelf_num} from top`;
+        return `Column ${m.column_id.toUpperCase()} — ${shelfLocation} (${m.start}${sVol} – ${m.end}${eVol})`;
       });
 
       const multiNote = (matches.length > 1 && qVol === 0)
