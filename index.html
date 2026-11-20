@@ -3,977 +3,454 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Library Column Indexer</title>
+  <title>Library Map Indexer</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    :root {
-      --bg: #f3f4f6;
-      --card: #ffffff;
-      --border: #e5e7eb;
-      --text: #111827;
-      --muted: #6b7280;
-      --green: #22c55e;
-      --yellow: #eab308;
-      --red: #ef4444;
-      --blue: #2563eb;
-    }
-    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-    body {
-      margin: 0;
-      height: 100dvh;
-      display: flex;
-      flex-direction: column;
-      background: var(--bg);
-      color: var(--text);
-      overflow: hidden;
-    }
-
-    /* Top Bar */
-    header {
-      background: var(--card);
-      border-bottom: 1px solid var(--border);
-      padding: 10px 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      flex-wrap: wrap;
-      z-index: 20;
-    }
-    .title-group h1 { font-size: 16px; margin: 0 0 4px 0; }
-    .legend {
-      display: flex;
-      gap: 10px;
-      font-size: 12px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-    .dot {
-      width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px;
-    }
-    .header-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    button {
-      border: 1px solid var(--border);
-      background: var(--card);
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      min-height: 36px;
-    }
-    button.primary {
-      background: var(--blue);
-      color: white;
-      border-color: var(--blue);
-    }
-    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-    /* Workspace Layout */
-    .workspace {
-      flex: 1;
-      display: flex;
-      position: relative;
-      overflow: hidden;
-    }
-
-    /* Map Area */
-    #mapWrapper {
-      flex: 1;
-      overflow: auto;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 16px;
-      touch-action: pan-x pan-y pinch-zoom;
-    }
-    #mapWrapper svg {
-      max-width: 100%;
-      max-height: 100%;
-      height: auto;
-      background: white;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
-    }
-
-    /* Column Map States */
-    .col-node { cursor: pointer; transition: opacity 0.15s; }
-    .col-node:hover { opacity: 0.8; }
-
-    .col-complete, .col-complete * { fill: #22c55e !important; stroke: #15803d !important; }
-    .col-partial, .col-partial *   { fill: #facc15 !important; stroke: #a16207 !important; }
-    .col-conflict, .col-conflict * { fill: #ef4444 !important; stroke: #991b1b !important; }
-    .col-selected, .col-selected * { stroke: #2563eb !important; stroke-width: 3px !important; }
-
-    /* Side Drawer (Desktop) / Bottom Sheet (Mobile) */
-    #drawer {
-      width: 450px;
-      max-width: 100%;
-      background: var(--card);
-      border-left: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      z-index: 30;
-      box-shadow: -4px 0 20px rgba(0,0,0,0.08);
-      transition: transform 0.25s ease;
-    }
-    #drawer.hidden { display: none; }
-
-    .drawer-header {
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .drawer-header h2 { margin: 0; font-size: 18px; }
-    .drawer-sub { font-size: 12px; color: var(--muted); }
-
-    /* Entry Granularity Switcher */
-    .granularity-bar {
-      display: flex;
-      gap: 6px;
-      padding: 10px 16px;
-      background: #f9fafb;
-      border-bottom: 1px solid var(--border);
-    }
-    .gran-btn {
-      flex: 1;
-      padding: 7px 10px;
-      font-size: 13px;
-      border-radius: 8px;
-      background: white;
-      color: var(--text);
-      border: 1px solid var(--border);
-    }
-    .gran-btn.active {
-      background: var(--blue);
-      color: white;
-      border-color: var(--blue);
-    }
-
-    .shelf-list {
-      flex: 1;
-      overflow-y: auto;
-      padding: 12px 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .shelf-card {
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 12px;
-      background: #fafafa;
-    }
-    .shelf-card.verified { background: #f0fdf4; border-color: #86efac; }
-    .shelf-card.conflict { background: #fef2f2; border-color: #fca5a5; }
-    .shelf-card.waiting  { background: #fefce8; border-color: #fde047; }
-
-    .shelf-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      gap: 6px;
-    }
-    .shelf-title { font-weight: 700; font-size: 14px; }
-    .pill {
-      font-size: 11px;
-      font-weight: 700;
-      padding: 2px 8px;
-      border-radius: 999px;
-      background: #e5e7eb;
-    }
-    .pill.verified { background: #dcfce7; color: #166534; }
-    .pill.conflict { background: #fee2e2; color: #991b1b; }
-    .pill.waiting  { background: #fef9c3; color: #854d0e; }
-
-    .conflict-hint {
-      font-size: 12px;
-      color: #991b1b;
-      background: #fee2e2;
-      padding: 6px 8px;
-      border-radius: 6px;
-      margin-bottom: 8px;
-    }
-
-    .inputs-row {
-      display: flex;
-      gap: 5px;
-      align-items: center;
-      margin-bottom: 6px;
-    }
-    .inputs-row input {
-      padding: 9px 6px;
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      font-size: 15px;
-      font-family: monospace;
-      text-align: center;
-    }
-    .inputs-row input.code-in {
-      flex: 2;
-      min-width: 78px;
-    }
-    .inputs-row input.vol-in {
-      flex: 1;
-      min-width: 44px;
-      max-width: 58px;
-      background: #f9fafb;
-    }
-    .inputs-row input:disabled {
-      background: #e5e7eb;
-      color: #6b7280;
-    }
-
-    .catalog-feedback {
-      font-size: 11px;
-      color: var(--muted);
-      min-height: 15px;
-      margin-bottom: 6px;
-      display: flex;
-      justify-content: space-between;
-    }
-    .cat-ok { color: #15803d; font-weight: 600; }
-    .cat-warn { color: #b45309; }
-
-    .mode-toggles {
-      display: flex;
-      gap: 6px;
-    }
-    .mode-btn {
-      flex: 1;
-      padding: 6px 8px;
-      font-size: 12px;
-      min-height: 34px;
-      background: white;
-    }
-    .mode-btn.active {
-      background: #1f2937;
-      color: white;
-      border-color: #1f2937;
-    }
-
-    .drawer-footer {
-      padding: 12px 16px;
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 10px;
-    }
-    .drawer-footer button { flex: 1; min-height: 44px; font-size: 15px; }
-
-    @media (max-width: 768px) {
-      #drawer {
-        position: fixed;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        width: 100%;
-        height: 75dvh;
-        border-left: none;
-        border-top: 1px solid var(--border);
-        border-radius: 16px 16px 0 0;
-        box-shadow: 0 -6px 24px rgba(0,0,0,0.15);
-      }
+    :root { --bg:#f3f4f6; --card:#fff; --border:#e5e7eb; --text:#111827; --muted:#6b7280; --green:#22c55e; --yellow:#eab308; --red:#ef4444; --blue:#2563eb; }
+    * { box-sizing:border-box; font-family:system-ui,-apple-system,sans-serif; }
+    body { margin:0; height:100dvh; display:flex; flex-direction:column; background:var(--bg); color:var(--text); overflow:hidden; }
+    header { background:var(--card); border-bottom:1px solid var(--border); padding:8px 14px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; z-index:20; }
+    .legend { display:flex; gap:10px; font-size:12px; align-items:center; flex-wrap:wrap; }
+    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:4px; }
+    button { border:1px solid var(--border); background:var(--card); color:var(--text); padding:7px 11px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
+    button.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
+    button.danger { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+    button:disabled { opacity:0.5; cursor:not-allowed; }
+    .workspace { flex:1; display:flex; position:relative; overflow:hidden; }
+    #mapWrapper { flex:1; overflow:auto; display:flex; justify-content:center; align-items:center; padding:12px; touch-action:pan-x pan-y pinch-zoom; }
+    #mapWrapper svg { max-width:100%; max-height:100%; height:auto; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,.08); }
+    .col-node { cursor:pointer; }
+    .col-complete, .col-complete * { fill:#22c55e !important; stroke:#15803d !important; }
+    .col-edges, .col-edges *       { fill:#facc15 !important; stroke:#a16207 !important; }
+    .col-selected, .col-selected * { stroke:#2563eb !important; stroke-width:3px !important; }
+    #drawer { width:430px; max-width:100%; background:var(--card); border-left:1px solid var(--border); display:flex; flex-direction:column; z-index:30; box-shadow:-4px 0 20px rgba(0,0,0,.08); }
+    #drawer.hidden { display:none; }
+    .drawer-header { padding:10px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
+    .drawer-header h2 { margin:0; font-size:17px; }
+    .granularity-bar { display:flex; gap:6px; padding:8px 14px; background:#f9fafb; border-bottom:1px solid var(--border); }
+    .gran-btn { flex:1; padding:6px; font-size:12px; }
+    .gran-btn.active { background:var(--blue); color:#fff; border-color:var(--blue); }
+    .shelf-list { flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:10px; }
+    .shelf-card { border:1px solid var(--border); border-radius:10px; padding:9px 11px; background:#fafafa; }
+    .shelf-card.verified { background:#f0fdf4; border-color:#86efac; }
+    .shelf-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-weight:700; font-size:13px; }
+    .inputs-row { display:flex; gap:5px; align-items:center; margin-bottom:5px; }
+    .inputs-row input { padding:8px 5px; border:1px solid #d1d5db; border-radius:7px; font-size:15px; font-family:monospace; text-align:center; }
+    .inputs-row input.code-in { flex:2; min-width:74px; }
+    .inputs-row input.vol-in { flex:1; min-width:42px; max-width:54px; }
+    .inputs-row input:disabled { background:#e5e7eb; color:#374151; }
+    .cat-fb { font-size:11px; color:var(--muted); min-height:14px; margin-bottom:4px; }
+    .mode-toggles { display:flex; gap:5px; }
+    .mode-btn { flex:1; padding:5px; font-size:12px; }
+    .mode-btn.active { background:#1f2937; color:#fff; border-color:#1f2937; }
+    .drawer-footer { padding:10px 14px; border-top:1px solid var(--border); display:flex; gap:8px; }
+    .drawer-footer button { flex:1; min-height:42px; font-size:14px; }
+    @media (max-width:768px) {
+      #drawer { position:fixed; left:0; right:0; bottom:0; width:100%; height:75dvh; border-left:none; border-top:1px solid var(--border); border-radius:16px 16px 0 0; }
     }
   </style>
 </head>
 <body>
-
   <header>
-    <div class="title-group">
-      <h1>Library Map Indexer</h1>
-      <div class="legend">
-        <span><i class="dot" style="background:#d1d5db"></i>Unmapped</span>
-        <span><i class="dot" style="background:#eab308"></i>Partial / Edges Only / 1st Check</span>
-        <span><i class="dot" style="background:#ef4444"></i>Conflict</span>
-        <span><i class="dot" style="background:#22c55e"></i>Full Column Verified</span>
-      </div>
+    <div class="legend">
+      <strong>Indexer</strong>
+      <span><i class="dot" style="background:#d1d5db"></i>Open</span>
+      <span><i class="dot" style="background:#eab308"></i>Edges Only</span>
+      <span><i class="dot" style="background:#22c55e"></i>Verified</span>
     </div>
-    <div class="header-actions">
-      <span id="catalogStatus" style="font-size:12px; color:var(--muted);">Catalog: loading...</span>
-      <span id="globalStats" style="font-size:13px; color:var(--muted);">Map: loading...</span>
-      <button id="exportJsonBtn">Export Verified JSON</button>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span id="stats" style="font-size:12px;color:var(--muted);">Loading...</span>
+      <button id="exportBtn">Export JSON</button>
     </div>
   </header>
 
   <div class="workspace">
     <main id="mapWrapper"></main>
-
     <aside id="drawer" class="hidden">
       <div class="drawer-header">
-        <div>
-          <h2 id="drawerTitle">Column —</h2>
-          <div id="drawerSub" class="drawer-sub">1 = top shelf; Vol is optional</div>
-        </div>
-        <button id="closeDrawerBtn" style="min-height:34px;">✕</button>
+        <h2 id="drawerTitle">Column —</h2>
+        <button id="closeBtn">✕</button>
       </div>
-
       <div class="granularity-bar">
-        <button type="button" id="modeShelvesBtn" class="gran-btn active">Shelf-by-Shelf (1–5)</button>
-        <button type="button" id="modeEdgesBtn" class="gran-btn">Column Edges Only (Top & Bottom)</button>
+        <button type="button" id="modeShelvesBtn" class="gran-btn active">All Shelves</button>
+        <button type="button" id="modeEdgesBtn" class="gran-btn">Edges Only</button>
       </div>
-
       <div id="shelfList" class="shelf-list"></div>
-
-      <div class="drawer-footer">
-        <button id="submitColumnBtn" class="primary">Submit Column</button>
-      </div>
+      <div class="drawer-footer" id="drawerFooter"></div>
     </aside>
   </div>
 
   <script>
-    // =========================================================================
-    // 1. SUPABASE CONFIGURATION (Normalized automatically to avoid /rest/v1/ error)
-    // =========================================================================
     const RAW_SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIMflO"; // <-- Replace with full key if truncated
-    const SVG_FILENAME = "libary_map.svg";
-    const CATALOG_FILENAME = "catalog_index.json";
-
-    const cleanSupabaseUrl = RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
-    const db = window.supabase.createClient(cleanSupabaseUrl, SUPABASE_ANON_KEY.trim());
+    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIM"; // Paste full key
+    const db = window.supabase.createClient(
+      RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, ""),
+      SUPABASE_ANON_KEY.trim()
+    );
 
     let sessionId = localStorage.getItem("lib_indexer_session");
-    if (!sessionId) {
-      sessionId = crypto.randomUUID();
-      localStorage.setItem("lib_indexer_session", sessionId);
-    }
+    if (!sessionId) { sessionId = crypto.randomUUID(); localStorage.setItem("lib_indexer_session", sessionId); }
 
-    const colRegex = /^([a-zA-Z]+)\d+(_\d+)?$/;
+    const colRegex = /^([a-zA-Z]+)(\d+)(_\d+)?$/;
     const columns = new Map();
-    let allSubmissions = [];
-    let catalog = []; // Sorted [{ code: "104.20", vol: 2 }, ...]
-    let activeColId = null;
-    let drawerGranularity = "shelves"; // "shelves" | "edges"
+    let allSubs = [], allReports = [], catalog = [];
+    let activeColId = null, granularity = "shelves";
 
     const mapWrapper = document.getElementById("mapWrapper");
     const drawer = document.getElementById("drawer");
     const drawerTitle = document.getElementById("drawerTitle");
-    const drawerSub = document.getElementById("drawerSub");
     const shelfList = document.getElementById("shelfList");
-    const submitColumnBtn = document.getElementById("submitColumnBtn");
-    const globalStats = document.getElementById("globalStats");
-    const catalogStatus = document.getElementById("catalogStatus");
+    const drawerFooter = document.getElementById("drawerFooter");
+    const stats = document.getElementById("stats");
     const modeShelvesBtn = document.getElementById("modeShelvesBtn");
     const modeEdgesBtn = document.getElementById("modeEdgesBtn");
 
-    function getShelfCountForLetter(letter) {
-      return ["d", "e", "f", "g"].includes(letter.toLowerCase()) ? 3 : 5;
-    }
+    const getShelfCount = (letter) => ["d", "e", "f", "g"].includes(letter.toLowerCase()) ? 3 : 5;
+    const formatDewey = (v) => (!v.includes(".") && /^\d{4,}/.test(v.trim())) ? v.trim().slice(0, 3) + "." + v.trim().slice(3) : v.trim();
 
-    function formatBoundLabel(row) {
-      if (row.status !== "indexed") return row.status.toUpperCase();
-      const sVol = row.start_vol ? ` (v.${row.start_vol})` : "";
-      const eVol = row.end_vol ? ` (v.${row.end_vol})` : "";
-      return `${row.start_code}${sVol} – ${row.end_code}${eVol}`;
-    }
-
-    // =========================================================================
-    // 2. CATALOG BINARY SEARCH & NEXT-BOOK PREDICTION
-    // =========================================================================
-    async function loadCatalog() {
-      try {
-        const res = await fetch(CATALOG_FILENAME);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        catalog = await res.json();
-        catalogStatus.textContent = `Catalog: ${catalog.length.toLocaleString()} items`;
-      } catch (err) {
-        catalog = [];
-        catalogStatus.textContent = "Catalog: offline";
-      }
-    }
-
-    function compareTuple(aCode, aVol, bCode, bVol) {
-      if (aCode !== bCode) return aCode < bCode ? -1 : 1;
-      const v1 = aVol || 0;
-      const v2 = bVol || 0;
-      return v1 - v2;
-    }
-
-    // Finds exact match index (or best match for code if vol omitted) and returns { exists, nextEntry }
-    function lookupInCatalog(code, vol) {
-      if (!catalog.length || !code) return { exists: false, nextEntry: null };
-      const targetVol = vol || 0;
-
-      // Binary search for lower bound >= (code, targetVol)
+    function lookupCatalog(code, vol) {
+      if (!catalog.length || !code) return { exists: false, next: null };
+      const tVol = vol || 0;
       let lo = 0, hi = catalog.length - 1, idx = -1;
       while (lo <= hi) {
-        const mid = (lo + hi) >> 1;
-        const item = catalog[mid];
-        const cmp = compareTuple(item.code, item.vol || 0, code, targetVol);
-        if (cmp === 0) {
-          idx = mid;
-          break;
-        } else if (cmp < 0) {
-          lo = mid + 1;
-        } else {
-          hi = mid - 1;
-        }
+        const mid = (lo + hi) >> 1, it = catalog[mid];
+        const cmp = it.code !== code ? (it.code < code ? -1 : 1) : (it.vol || 0) - tVol;
+        if (cmp === 0) { idx = mid; break; }
+        cmp < 0 ? (lo = mid + 1) : (hi = mid - 1);
       }
-
-      // If exact (code, 0) wasn't found because the book has volumes (e.g. vol 1, vol 2),
-      // check if any entry starts with that code and take the last volume of that code
-      if (idx === -1 && targetVol === 0) {
-        let lastCodeIdx = -1;
-        for (let i = lo; i < catalog.length && catalog[i].code === code; i++) {
-          lastCodeIdx = i;
-        }
-        if (lastCodeIdx !== -1) {
-          return {
-            exists: true,
-            nextEntry: lastCodeIdx + 1 < catalog.length ? catalog[lastCodeIdx + 1] : null,
-          };
-        }
-        return { exists: false, nextEntry: null };
+      if (idx === -1 && tVol === 0) {
+        let last = -1;
+        for (let i = lo; i < catalog.length && catalog[i].code === code; i++) last = i;
+        if (last !== -1) return { exists: true, next: catalog[last + 1] || null };
       }
-
-      if (idx !== -1) {
-        return {
-          exists: true,
-          nextEntry: idx + 1 < catalog.length ? catalog[idx + 1] : null,
-        };
-      }
-      return { exists: false, nextEntry: null };
+      return idx !== -1 ? { exists: true, next: catalog[idx + 1] || null } : { exists: false, next: null };
     }
 
-    // =========================================================================
-    // 3. LOAD SVG & SUPABASE SUBMISSIONS
-    // =========================================================================
+    // Active submission = latest submission for (colId, shelfNum) unless overruled by majority reports
+    function getActiveSub(colId, shelfNum) {
+      const subs = allSubs.filter((s) => s.column_id === colId && s.shelf_num === shelfNum);
+      for (let i = subs.length - 1; i >= 0; i--) {
+        const sub = subs[i];
+        const reps = allReports.filter((r) => r.submission_id === sub.id);
+        // Overruled if >= 2 independent error reports exist against this submission
+        if (reps.length < 2) {
+          return { sub, reportCount: reps.length, reportedByMe: reps.some((r) => r.session_id === sessionId) };
+        }
+      }
+      return null;
+    }
+
+    function getColumnState(colId) {
+      const col = columns.get(colId);
+      const shelves = [];
+      for (let i = 1; i <= col.shelfCount; i++) shelves.push(getActiveSub(colId, i));
+      if (shelves.every(Boolean)) return { status: "complete", shelves };
+      const edges = getActiveSub(colId, 0);
+      if (edges) return { status: "edges", edges };
+      return { status: "open" };
+    }
+
+    // Find immediately preceding column (e.g. r10 -> r11, or previous column in natural order)
+    function getPrefillFromPrevColumn(colId) {
+      const ordered = Array.from(columns.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      const idx = ordered.indexOf(colId);
+      if (idx <= 0) return null;
+      const prevId = ordered[idx - 1];
+      const prevCol = columns.get(prevId);
+      const prevState = getColumnState(prevId);
+
+      let lastSub = null;
+      if (prevState.status === "complete") {
+        // Walk backwards from bottom shelf to find last 'indexed' shelf
+        for (let i = prevCol.shelfCount - 1; i >= 0; i--) {
+          if (prevState.shelves[i].sub.status === "indexed") { lastSub = prevState.shelves[i].sub; break; }
+        }
+      } else if (prevState.status === "edges" && prevState.edges.sub.status === "indexed") {
+        lastSub = prevState.edges.sub;
+      }
+      if (!lastSub) return null;
+
+      const cat = lookupCatalog(lastSub.end_code, lastSub.end_vol || 0);
+      if (cat.exists && cat.next) return { code: cat.next.code, vol: cat.next.vol || "" };
+      if (lastSub.end_vol) return { code: lastSub.end_code, vol: lastSub.end_vol + 1 };
+      return { code: lastSub.end_code, vol: "" };
+    }
+
     async function init() {
-      await Promise.all([
-        loadCatalog(),
-        (async () => {
-          const res = await fetch(SVG_FILENAME);
-          const svgText = await res.text();
-          mapWrapper.innerHTML = svgText;
-        })(),
+      const [svgRes, catRes] = await Promise.all([
+        fetch("library_map.svg"),
+        fetch("catalog_index.json").catch(() => null),
       ]);
+      mapWrapper.innerHTML = await svgRes.text();
+      if (catRes && catRes.ok) catalog = await catRes.json();
 
       mapWrapper.querySelectorAll("svg [id]").forEach((el) => {
         const cleanId = el.id.trim();
-        const match = cleanId.match(colRegex);
-        if (match) {
-          const letter = match[1];
-          columns.set(cleanId, {
-            id: cleanId,
-            letter,
-            shelfCount: getShelfCountForLetter(letter),
-            el,
-          });
+        const m = cleanId.match(colRegex);
+        if (m) {
+          columns.set(cleanId, { id: cleanId, letter: m[1], shelfCount: getShelfCount(m[1]), el });
           el.classList.add("col-node");
           el.style.pointerEvents = "all";
-          el.addEventListener("click", (e) => {
-            e.stopPropagation();
-            openColumnDrawer(cleanId);
-          });
+          el.addEventListener("click", (e) => { e.stopPropagation(); openDrawer(cleanId); });
         }
       });
 
-      await fetchSubmissions();
-
-      db.channel("public:shelf_submissions")
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "shelf_submissions" }, (payload) => {
-          allSubmissions.push(payload.new);
-          refreshMapColors();
-        })
+      await reloadData();
+      db.channel("live")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "shelf_submissions" }, () => reloadData())
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "shelf_reports" }, () => reloadData())
         .subscribe();
     }
 
-    async function fetchSubmissions() {
-      const { data, error } = await db
-        .from("shelf_submissions")
-        .select("*")
-        .order("created_at", { ascending: true });
-
-      if (error) {
-        console.error("Supabase fetch error:", error);
-      } else if (data) {
-        allSubmissions = data;
-        refreshMapColors();
-      }
+    async function reloadData() {
+      const [sRes, rRes] = await Promise.all([
+        db.from("shelf_submissions").select("*").order("created_at", { ascending: true }),
+        db.from("shelf_reports").select("*"),
+      ]);
+      if (sRes.data) allSubs = sRes.data;
+      if (rRes.data) allReports = rRes.data;
+      refreshMap();
+      if (activeColId) renderDrawer();
     }
 
-    // shelfNum = 0 represents "Column Edges Only"
-    function evaluateShelf(colId, shelfNum) {
-      const subs = allSubmissions.filter(
-        (s) => s.column_id === colId && s.shelf_num === shelfNum
-      );
-
-      if (subs.length === 0) {
-        return { state: "unmapped", subs };
-      }
-
-      const counts = new Map();
-      const canonical = new Map();
-      for (const s of subs) {
-        const sig = s.status === "indexed"
-          ? `indexed|${s.start_code}|${s.start_vol || 0}|${s.end_code}|${s.end_vol || 0}`
-          : s.status;
-        counts.set(sig, (counts.get(sig) || 0) + 1);
-        canonical.set(sig, s);
-      }
-
-      for (const [sig, count] of counts.entries()) {
-        if (count >= 2) {
-          return { state: "verified", value: canonical.get(sig), subs };
-        }
-      }
-
-      if (subs.length === 1) {
-        const alreadySubmittedByMe = subs[0].session_id === sessionId;
-        return { state: "waiting", alreadySubmittedByMe, subs };
-      }
-
-      return { state: "conflict", options: Array.from(canonical.values()), subs };
-    }
-
-    function refreshMapColors() {
-      let verifiedCols = 0;
-
+    function refreshMap() {
+      let done = 0;
       columns.forEach((col) => {
-        const shelfStates = [];
-        for (let i = 1; i <= col.shelfCount; i++) {
-          shelfStates.push(evaluateShelf(col.id, i).state);
-        }
-        const edgeState = evaluateShelf(col.id, 0).state;
-
-        col.el.classList.remove("col-complete", "col-partial", "col-conflict");
-
-        if (shelfStates.includes("conflict") || edgeState === "conflict") {
-          col.el.classList.add("col-conflict");
-        } else if (shelfStates.every((st) => st === "verified")) {
-          // Green only when every individual shelf in the column is double-verified
-          col.el.classList.add("col-complete");
-          verifiedCols++;
-        } else if (shelfStates.some((st) => st !== "unmapped") || edgeState !== "unmapped") {
-          // Yellow if partially mapped OR if only Column Edges (shelf_num=0) were entered
-          col.el.classList.add("col-partial");
-        }
+        col.el.classList.remove("col-complete", "col-edges");
+        const st = getColumnState(col.id).status;
+        if (st === "complete") { col.el.classList.add("col-complete"); done++; }
+        else if (st === "edges") col.el.classList.add("col-edges");
       });
-
-      globalStats.textContent = `${verifiedCols} / ${columns.size} columns fully verified`;
+      stats.textContent = `${done}/${columns.size} verified`;
     }
 
-    function formatDewey(raw) {
-      let val = raw.trim();
-      if (!val.includes(".") && /^\d{4,}/.test(val)) {
-        val = val.slice(0, 3) + "." + val.slice(3);
-      }
-      return val;
-    }
+    modeShelvesBtn.onclick = () => { granularity = "shelves"; modeShelvesBtn.classList.add("active"); modeEdgesBtn.classList.remove("active"); renderDrawer(); };
+    modeEdgesBtn.onclick = () => { granularity = "edges"; modeEdgesBtn.classList.add("active"); modeShelvesBtn.classList.remove("active"); renderDrawer(); };
+    document.getElementById("closeBtn").onclick = () => {
+      drawer.classList.add("hidden");
+      if (activeColId) columns.get(activeColId).el.classList.remove("col-selected");
+      activeColId = null;
+    };
 
-    // =========================================================================
-    // 4. DRAWER RENDERING (Shelves Mode vs. Column Edges Mode)
-    // =========================================================================
-    modeShelvesBtn.addEventListener("click", () => {
-      drawerGranularity = "shelves";
-      modeShelvesBtn.classList.add("active");
-      modeEdgesBtn.classList.remove("active");
-      if (activeColId) renderDrawerCards(activeColId);
-    });
-
-    modeEdgesBtn.addEventListener("click", () => {
-      drawerGranularity = "edges";
-      modeEdgesBtn.classList.add("active");
-      modeShelvesBtn.classList.remove("active");
-      if (activeColId) renderDrawerCards(activeColId);
-    });
-
-    function openColumnDrawer(colId) {
-      if (activeColId && columns.has(activeColId)) {
-        columns.get(activeColId).el.classList.remove("col-selected");
-      }
-
+    function openDrawer(colId) {
+      if (activeColId) columns.get(activeColId).el.classList.remove("col-selected");
       activeColId = colId;
-      const col = columns.get(colId);
-      col.el.classList.add("col-selected");
-
+      columns.get(colId).el.classList.add("col-selected");
       drawerTitle.textContent = `Column ${colId.toUpperCase()}`;
-      renderDrawerCards(colId);
+
+      const st = getColumnState(colId).status;
+      if (st === "complete") { granularity = "shelves"; modeShelvesBtn.classList.add("active"); modeEdgesBtn.classList.remove("active"); }
+      renderDrawer();
       drawer.classList.remove("hidden");
     }
 
-    function renderDrawerCards(colId) {
-      const col = columns.get(colId);
+    function renderDrawer() {
+      const col = columns.get(activeColId);
+      const colState = getColumnState(activeColId);
       shelfList.innerHTML = "";
+      drawerFooter.innerHTML = "";
 
-      if (drawerGranularity === "edges") {
-        drawerSub.textContent = `Quick estimate: Top-left of Shelf 1 to Bottom-right of Shelf ${col.shelfCount}`;
-        shelfList.appendChild(buildCardElement(colId, 0, `Whole Column (${col.shelfCount} shelves)`));
+      const isLocked = (granularity === "shelves" && colState.status === "complete") ||
+                       (granularity === "edges" && (colState.status === "edges" || colState.status === "complete"));
+
+      const rows = granularity === "edges"
+        ? [{ num: 0, label: `Column Edges (1–${col.shelfCount})`, active: colState.edges || (colState.status === "complete" ? colState.shelves[0] : null) }]
+        : Array.from({ length: col.shelfCount }, (_, i) => ({ num: i + 1, label: `Shelf ${i + 1}`, active: colState.shelves ? colState.shelves[i] : null }));
+
+      const prevPrefill = !isLocked ? getPrefillFromPrevColumn(activeColId) : null;
+
+      rows.forEach((r, idx) => {
+        const card = document.createElement("div");
+        card.className = `shelf-card ${isLocked ? "verified" : ""}`;
+        card.dataset.num = r.num;
+        card.dataset.mode = "indexed";
+
+        card.innerHTML = `
+          <div class="shelf-top">
+            <span>${r.label}</span>
+            <span style="font-size:11px;color:${isLocked ? "#15803d" : "#6b7280"}">${isLocked ? "Verified ✓" : "Required"}</span>
+          </div>
+          <div class="inputs-row">
+            <input type="text" inputmode="decimal" class="code-in start-in" placeholder="Left 503.42" />
+            <input type="number" inputmode="numeric" min="1" class="vol-in start-vol" placeholder="Vol" />
+            <span>–</span>
+            <input type="text" inputmode="decimal" class="code-in end-in" placeholder="Right 503.89" />
+            <input type="number" inputmode="numeric" min="1" class="vol-in end-vol" placeholder="Vol" />
+          </div>
+          <div class="cat-fb"></div>
+          <div class="mode-toggles">
+            <button type="button" class="mode-btn active" data-m="indexed">Range</button>
+            <button type="button" class="mode-btn" data-m="empty">Empty</button>
+            <button type="button" class="mode-btn" data-m="unindexed">Unindexed</button>
+          </div>
+        `;
+
+        const sIn = card.querySelector(".start-in"), sVol = card.querySelector(".start-vol");
+        const eIn = card.querySelector(".end-in"), eVol = card.querySelector(".end-vol");
+        const fb = card.querySelector(".cat-fb");
+        const btns = card.querySelectorAll(".mode-btn");
+
+        if (isLocked && r.active) {
+          const sub = r.active.sub;
+          [sIn, sVol, eIn, eVol, ...btns].forEach((el) => (el.disabled = true));
+          if (sub.status === "indexed") {
+            sIn.value = sub.start_code; sVol.value = sub.start_vol || "";
+            eIn.value = sub.end_code; eVol.value = sub.end_vol || "";
+          } else {
+            sIn.placeholder = sub.status.toUpperCase();
+          }
+        } else {
+          // Prefill first shelf from previous verified column
+          if (idx === 0 && prevPrefill) {
+            sIn.value = prevPrefill.code;
+            sVol.value = prevPrefill.vol;
+          }
+
+          btns.forEach((b) => {
+            b.onclick = () => {
+              btns.forEach((x) => x.classList.remove("active"));
+              b.classList.add("active");
+              card.dataset.mode = b.dataset.m;
+              const off = b.dataset.m !== "indexed";
+              [sIn, sVol, eIn, eVol].forEach((inp) => { inp.disabled = off; if (off) inp.value = ""; });
+              fb.textContent = "";
+              if (off) advanceFocus(r.num); else sIn.focus();
+            };
+          });
+
+          let endTouched = false;
+          sIn.oninput = () => {
+            sIn.value = formatDewey(sIn.value);
+            if (!endTouched && !eIn.value && sIn.value.includes(".")) eIn.value = sIn.value.split(".")[0] + ".";
+            if ((sIn.value.match(/\d/g) || []).length >= 5) { eIn.focus(); eIn.setSelectionRange(eIn.value.length, eIn.value.length); }
+          };
+          eIn.oninput = () => {
+            endTouched = true;
+            eIn.value = formatDewey(eIn.value);
+            const cat = lookupCatalog(eIn.value, parseInt(eVol.value, 10) || 0);
+            fb.textContent = eIn.value.length >= 6 ? (cat.exists ? (cat.next ? `✓ Next: ${cat.next.code}${cat.next.vol ? " v." + cat.next.vol : ""}` : "✓ End of catalog") : "? Not in catalog") : "";
+            if ((eIn.value.match(/\d/g) || []).length >= 5) advanceFocus(r.num);
+          };
+          eVol.oninput = () => syncNextShelf(r.num);
+          [sIn, sVol].forEach((el) => (el.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); eIn.focus(); } }));
+          [eIn, eVol].forEach((el) => (el.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); advanceFocus(r.num); } }));
+        }
+
+        shelfList.appendChild(card);
+      });
+
+      if (isLocked) {
+        // Error report button (2 independent reports overrule and unlock the column)
+        const targetSubs = rows.map((r) => r.active).filter(Boolean);
+        const maxReps = Math.max(...targetSubs.map((t) => t.reportCount));
+        const alreadyReported = targetSubs.some((t) => t.reportedByMe);
+
+        const repBtn = document.createElement("button");
+        repBtn.className = "danger";
+        repBtn.disabled = alreadyReported;
+        repBtn.textContent = alreadyReported
+          ? `Reported (${maxReps}/2 to overrule)`
+          : `Report Error (${maxReps}/2 reports)`;
+        repBtn.onclick = async () => {
+          repBtn.disabled = true;
+          const payload = targetSubs.map((t) => ({ submission_id: t.sub.id, column_id: activeColId, session_id: sessionId }));
+          const { error } = await db.from("shelf_reports").insert(payload);
+          if (error) alert(error.message);
+          await reloadData();
+        };
+        drawerFooter.appendChild(repBtn);
       } else {
-        drawerSub.textContent = `${col.shelfCount} shelves (1 = top; catalog auto-fills next shelf)`;
-        for (let num = 1; num <= col.shelfCount; num++) {
-          shelfList.appendChild(buildCardElement(colId, num, `Shelf ${num}`));
-        }
-      }
+        const subBtn = document.createElement("button");
+        subBtn.className = "primary";
+        subBtn.textContent = granularity === "edges" ? "Save Column Edges" : `Save All ${col.shelfCount} Shelves`;
+        subBtn.onclick = saveColumn;
+        drawerFooter.appendChild(subBtn);
 
-      const firstInput = shelfList.querySelector(".start-in:not(:disabled)");
-      if (firstInput) firstInput.focus();
+        const firstEmpty = Array.from(shelfList.querySelectorAll(".start-in")).find((i) => !i.value) || shelfList.querySelector(".end-in");
+        if (firstEmpty) firstEmpty.focus();
+      }
     }
 
-    function buildCardElement(colId, shelfNum, titleLabel) {
-      const evalRes = evaluateShelf(colId, shelfNum);
-      const card = document.createElement("div");
-      card.className = `shelf-card ${evalRes.state}`;
-      card.dataset.shelfNum = shelfNum;
-      card.dataset.mode = "indexed";
+    function syncNextShelf(num) {
+      const next = shelfList.querySelector(`.shelf-card[data-num="${num + 1}"]`);
+      if (!next || next.dataset.mode !== "indexed") return false;
+      const prev = shelfList.querySelector(`.shelf-card[data-num="${num}"]`);
+      const eCode = prev.querySelector(".end-in").value.trim();
+      const eVol = parseInt(prev.querySelector(".end-vol").value, 10) || 0;
+      const nStart = next.querySelector(".start-in"), nVol = next.querySelector(".start-vol"), nEnd = next.querySelector(".end-in");
 
-      let badgeText = "Unmapped";
-      if (evalRes.state === "verified") badgeText = "Verified ✓";
-      if (evalRes.state === "waiting") badgeText = evalRes.alreadySubmittedByMe ? "Saved (awaiting 2nd)" : "Needs 2nd check";
-      if (evalRes.state === "conflict") badgeText = "Conflict — tie-breaker needed";
-
-      let extraHtml = "";
-      if (evalRes.state === "conflict") {
-        const labels = evalRes.options.map((o) => formatBoundLabel(o));
-        extraHtml = `<div class="conflict-hint">Disagreement: <strong>${labels.join(" vs. ")}</strong>. Enter the true value.</div>`;
-      }
-
-      // If in Shelf-by-Shelf mode and Column Edges (shelf_num=0) already exist, show them as a helpful reference
-      if (shelfNum > 0) {
-        const edgeRes = evaluateShelf(colId, 0);
-        if (edgeRes.state === "verified" || edgeRes.state === "waiting") {
-          const sample = edgeRes.value || edgeRes.subs[0];
-          extraHtml += `<div style="font-size:11px; color:#1d4ed8; margin-bottom:6px;">Column edges recorded: <strong>${formatBoundLabel(sample)}</strong></div>`;
-        }
-      }
-
-      card.innerHTML = `
-        <div class="shelf-top">
-          <span class="shelf-title">${titleLabel}</span>
-          <span class="pill ${evalRes.state}">${badgeText}</span>
-        </div>
-        ${extraHtml}
-        <div class="inputs-row">
-          <input type="text" inputmode="decimal" class="code-in start-in" placeholder="Left 503.42" autocomplete="off" />
-          <input type="number" inputmode="numeric" min="1" class="vol-in start-vol-in" placeholder="Vol" autocomplete="off" />
-          <span>–</span>
-          <input type="text" inputmode="decimal" class="code-in end-in" placeholder="Right 503.89" autocomplete="off" />
-          <input type="number" inputmode="numeric" min="1" class="vol-in end-vol-in" placeholder="Vol" autocomplete="off" />
-        </div>
-        <div class="catalog-feedback">
-          <span class="fb-left"></span>
-          <span class="fb-right"></span>
-        </div>
-        <div class="mode-toggles">
-          <button type="button" class="mode-btn active" data-set="indexed">Range</button>
-          <button type="button" class="mode-btn" data-set="empty">Empty</button>
-          <button type="button" class="mode-btn" data-set="unindexed">Unindexed Books</button>
-        </div>
-      `;
-
-      const startIn = card.querySelector(".start-in");
-      const startVolIn = card.querySelector(".start-vol-in");
-      const endIn = card.querySelector(".end-in");
-      const endVolIn = card.querySelector(".end-vol-in");
-      const fbLeft = card.querySelector(".fb-left");
-      const fbRight = card.querySelector(".fb-right");
-      const modeBtns = card.querySelectorAll(".mode-btn");
-      const allInputs = [startIn, startVolIn, endIn, endVolIn];
-
-      if (evalRes.state === "verified" || (evalRes.state === "waiting" && evalRes.alreadySubmittedByMe)) {
-        card.dataset.mode = "skip";
-        allInputs.forEach((inp) => (inp.disabled = true));
-        modeBtns.forEach((b) => (b.disabled = true));
-        if (evalRes.state === "verified" && evalRes.value.status === "indexed") {
-          startIn.value = evalRes.value.start_code;
-          startVolIn.value = evalRes.value.start_vol || "";
-          endIn.value = evalRes.value.end_code;
-          endVolIn.value = evalRes.value.end_vol || "";
-        } else if (evalRes.state === "verified") {
-          startIn.placeholder = evalRes.value.status.toUpperCase();
-          endIn.placeholder = "";
-        }
-      }
-
-      function updateCatalogHints() {
-        if (!catalog.length) return;
-        const sCode = startIn.value.trim();
-        const sVol = parseInt(startVolIn.value, 10) || 0;
-        if (sCode.length >= 6) {
-          const res = lookupInCatalog(sCode, sVol);
-          fbLeft.innerHTML = res.exists ? `<span class="cat-ok">✓ ${sCode} in catalog</span>` : `<span class="cat-warn">? Not in catalog</span>`;
-        } else {
-          fbLeft.textContent = "";
-        }
-
-        const eCode = endIn.value.trim();
-        const eVol = parseInt(endVolIn.value, 10) || 0;
-        if (eCode.length >= 6) {
-          const res = lookupInCatalog(eCode, eVol);
-          if (res.exists && res.nextEntry) {
-            const nxtVol = res.nextEntry.vol ? ` v.${res.nextEntry.vol}` : "";
-            fbRight.innerHTML = `<span class="cat-ok">✓ Next: ${res.nextEntry.code}${nxtVol}</span>`;
-          } else if (res.exists) {
-            fbRight.innerHTML = `<span class="cat-ok">✓ End of catalog</span>`;
-          } else {
-            fbRight.innerHTML = `<span class="cat-warn">? Not in catalog</span>`;
-          }
-        } else {
-          fbRight.textContent = "";
-        }
-      }
-
-      modeBtns.forEach((btn) => {
-        btn.addEventListener("click", () => {
-          modeBtns.forEach((b) => b.classList.remove("active"));
-          btn.classList.add("active");
-          const mode = btn.dataset.set;
-          card.dataset.mode = mode;
-
-          if (mode === "indexed") {
-            allInputs.forEach((inp) => (inp.disabled = false));
-            startIn.focus();
-          } else {
-            allInputs.forEach((inp) => {
-              inp.disabled = true;
-              inp.value = "";
-            });
-            fbLeft.textContent = "";
-            fbRight.textContent = "";
-            focusNextShelf(shelfNum);
-          }
-        });
-      });
-
-      // Start input: auto-decimal + 5-digit auto-jump to End input
-      let endEdited = false;
-      startIn.addEventListener("input", () => {
-        const fmt = formatDewey(startIn.value);
-        if (startIn.value !== fmt) startIn.value = fmt;
-
-        if (!endEdited && !endIn.value) {
-          const dot = fmt.indexOf(".");
-          if (dot !== -1) endIn.value = fmt.slice(0, dot + 1);
-        }
-
-        updateCatalogHints();
-
-        const digits = (fmt.match(/\d/g) || []).length;
-        if (digits >= 5) {
-          endIn.focus();
-          endIn.setSelectionRange(endIn.value.length, endIn.value.length);
-        }
-      });
-
-      startVolIn.addEventListener("input", updateCatalogHints);
-
-      // End input: auto-decimal + catalog next-book prediction + 5-digit auto-jump
-      endIn.addEventListener("input", () => {
-        endEdited = true;
-        const fmt = formatDewey(endIn.value);
-        if (endIn.value !== fmt) endIn.value = fmt;
-
-        updateCatalogHints();
-
-        const digits = (fmt.match(/\d/g) || []).length;
-        if (digits >= 5) {
-          focusNextShelf(shelfNum);
-        }
-      });
-
-      endVolIn.addEventListener("input", () => {
-        updateCatalogHints();
-        // If user updates volume on End box, re-sync the predicted Start of the next shelf
-        if (shelfNum > 0) {
-          applyCatalogPredictionToNextShelf(shelfNum);
-        }
-      });
-
-      // Enter key chaining
-      startIn.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
-      });
-      startVolIn.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); endIn.focus(); }
-      });
-      endIn.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); focusNextShelf(shelfNum); }
-      });
-      endVolIn.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") { e.preventDefault(); focusNextShelf(shelfNum); }
-      });
-
-      return card;
-    }
-
-    function applyCatalogPredictionToNextShelf(currentNum) {
-      const nextCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum + 1}"]`);
-      if (!nextCard) return false;
-
-      const nextStartIn = nextCard.querySelector(".start-in:not(:disabled)");
-      const nextStartVolIn = nextCard.querySelector(".start-vol-in:not(:disabled)");
-      if (!nextStartIn) return false;
-
-      const prevCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum}"]`);
-      const prevEndCode = prevCard.querySelector(".end-in").value.trim();
-      const prevEndVol = parseInt(prevCard.querySelector(".end-vol-in").value, 10) || 0;
-
-      // 1. Try exact next book from catalog_index.json
-      const catRes = lookupInCatalog(prevEndCode, prevEndVol);
-      if (catRes.exists && catRes.nextEntry) {
-        nextStartIn.value = catRes.nextEntry.code;
-        if (nextStartVolIn) {
-          nextStartVolIn.value = catRes.nextEntry.vol ? catRes.nextEntry.vol : "";
-        }
-        nextStartIn.dispatchEvent(new Event("input")); // Updates hints & pre-fills next End prefix
+      const cat = lookupCatalog(eCode, eVol);
+      if (cat.exists && cat.next) {
+        nStart.value = cat.next.code;
+        nVol.value = cat.next.vol || "";
+        if (!nEnd.value && nStart.value.includes(".")) nEnd.value = nStart.value.split(".")[0] + ".";
         return true;
       }
-
-      // 2. Fallback if not in catalog: carry over multi-volume increment or 3-digit prefix
-      if (prevEndCode && prevEndVol > 0) {
-        nextStartIn.value = prevEndCode;
-        if (nextStartVolIn) nextStartVolIn.value = prevEndVol + 1;
-        nextStartIn.dispatchEvent(new Event("input"));
+      if (eCode && eVol > 0) {
+        nStart.value = eCode; nVol.value = eVol + 1;
+        if (!nEnd.value && eCode.includes(".")) nEnd.value = eCode.split(".")[0] + ".";
         return true;
-      }
-
-      const dot = prevEndCode.indexOf(".");
-      if (dot !== -1 && !nextStartIn.value) {
-        nextStartIn.value = prevEndCode.slice(0, dot + 1);
       }
       return false;
     }
 
-    function focusNextShelf(currentNum) {
-      if (currentNum > 0) {
-        const nextCard = shelfList.querySelector(`.shelf-card[data-shelf-num="${currentNum + 1}"]`);
-        if (nextCard) {
-          const nextStartIn = nextCard.querySelector(".start-in:not(:disabled)");
-          if (nextStartIn) {
-            const autoFilled = applyCatalogPredictionToNextShelf(currentNum);
-            if (autoFilled) {
-              // Because next shelf's Start was auto-filled from catalog, jump straight to next shelf's End!
-              const nextEndIn = nextCard.querySelector(".end-in:not(:disabled)");
-              if (nextEndIn) {
-                nextEndIn.focus();
-                nextEndIn.setSelectionRange(nextEndIn.value.length, nextEndIn.value.length);
-                return;
-              }
-            }
-            nextStartIn.focus();
-            nextStartIn.setSelectionRange(nextStartIn.value.length, nextStartIn.value.length);
-            return;
-          }
-        }
+    function advanceFocus(num) {
+      const next = shelfList.querySelector(`.shelf-card[data-num="${num + 1}"]`);
+      if (next && next.dataset.mode === "indexed") {
+        const predicted = syncNextShelf(num);
+        const target = predicted ? next.querySelector(".end-in") : next.querySelector(".start-in");
+        target.focus();
+        target.setSelectionRange(target.value.length, target.value.length);
+      } else {
+        drawerFooter.querySelector("button")?.focus();
       }
-      submitColumnBtn.focus();
     }
 
-    document.getElementById("closeDrawerBtn").addEventListener("click", () => {
-      drawer.classList.add("hidden");
-      if (activeColId && columns.has(activeColId)) {
-        columns.get(activeColId).el.classList.remove("col-selected");
-      }
-      activeColId = null;
-    });
-
-    // =========================================================================
-    // 5. SUBMIT TO SUPABASE
-    // =========================================================================
-    submitColumnBtn.addEventListener("click", async () => {
-      if (!activeColId) return;
+    async function saveColumn() {
       const cards = shelfList.querySelectorAll(".shelf-card");
-      const rowsToInsert = [];
-
-      for (const card of cards) {
-        const mode = card.dataset.mode;
-        if (mode === "skip") continue;
-
-        const shelfNum = parseInt(card.dataset.shelfNum, 10);
+      const rows = [];
+      for (const c of cards) {
+        const num = parseInt(c.dataset.num, 10);
+        const mode = c.dataset.mode;
         if (mode === "indexed") {
-          const start = card.querySelector(".start-in").value.trim();
-          const end = card.querySelector(".end-in").value.trim();
-          const startVolRaw = card.querySelector(".start-vol-in").value.trim();
-          const endVolRaw = card.querySelector(".end-vol-in").value.trim();
-
-          if (!start && !end) continue;
-          if (!start || !end) {
-            alert(`Row ${shelfNum === 0 ? "Column Edges" : "Shelf " + shelfNum}: Please enter both Left and Right codes, or mark it Empty/Unindexed.`);
-            return;
-          }
-
-          rowsToInsert.push({
-            column_id: activeColId,
-            shelf_num: shelfNum,
-            status: "indexed",
-            start_code: start,
-            start_vol: startVolRaw ? parseInt(startVolRaw, 10) : null,
-            end_code: end,
-            end_vol: endVolRaw ? parseInt(endVolRaw, 10) : null,
+          const start = c.querySelector(".start-in").value.trim();
+          const end = c.querySelector(".end-in").value.trim();
+          if (!start || !end) { alert(`Please fill out all shelves before saving (missing ${num === 0 ? "Edges" : "Shelf " + num}).`); return; }
+          rows.push({
+            column_id: activeColId, shelf_num: num, status: "indexed",
+            start_code: start, start_vol: parseInt(c.querySelector(".start-vol").value, 10) || null,
+            end_code: end, end_vol: parseInt(c.querySelector(".end-vol").value, 10) || null,
             session_id: sessionId,
           });
         } else {
-          rowsToInsert.push({
-            column_id: activeColId,
-            shelf_num: shelfNum,
-            status: mode,
-            start_code: null,
-            start_vol: null,
-            end_code: null,
-            end_vol: null,
-            session_id: sessionId,
-          });
+          rows.push({ column_id: activeColId, shelf_num: num, status: mode, start_code: null, start_vol: null, end_code: null, end_vol: null, session_id: sessionId });
         }
       }
 
-      if (rowsToInsert.length === 0) {
-        alert("No new entries to submit.");
-        return;
-      }
+      const btn = drawerFooter.querySelector("button");
+      btn.disabled = true;
+      const { error } = await db.from("shelf_submissions").insert(rows);
+      btn.disabled = false;
+      if (error) alert("Error: " + error.message);
+      else await reloadData();
+    }
 
-      submitColumnBtn.disabled = true;
-      submitColumnBtn.textContent = "Saving...";
-
-      const { error } = await db.from("shelf_submissions").insert(rowsToInsert);
-
-      submitColumnBtn.disabled = false;
-      submitColumnBtn.textContent = "Submit Column";
-
-      if (error) {
-        alert("Error saving: " + error.message);
-      } else {
-        await fetchSubmissions();
-        renderDrawerCards(activeColId);
-      }
-    });
-
-    // =========================================================================
-    // 6. EXPORT VERIFIED JSON
-    // =========================================================================
-    document.getElementById("exportJsonBtn").addEventListener("click", () => {
-      const verifiedShelves = [];
+    document.getElementById("exportBtn").onclick = () => {
+      const out = [];
       columns.forEach((col) => {
-        for (let num = 0; num <= col.shelfCount; num++) {
-          const res = evaluateShelf(col.id, num);
-          if (res.state === "verified" && res.value.status === "indexed") {
-            verifiedShelves.push({
-              column_id: col.id,
-              shelf_num: num, // 0 = whole column estimate, 1..5 = exact shelf
-              start: res.value.start_code,
-              start_vol: res.value.start_vol || null,
-              end: res.value.end_code,
-              end_vol: res.value.end_vol || null,
-            });
+        const st = getColumnState(col.id);
+        const list = st.status === "complete" ? st.shelves : (st.status === "edges" ? [st.edges] : []);
+        list.forEach((item) => {
+          if (item.sub.status === "indexed") {
+            out.push({ column_id: col.id, shelf_num: item.sub.shelf_num, start: item.sub.start_code, start_vol: item.sub.start_vol, end: item.sub.end_code, end_vol: item.sub.end_vol });
           }
-        }
+        });
       });
-
-      verifiedShelves.sort((a, b) =>
-        a.column_id.localeCompare(b.column_id, undefined, { numeric: true }) || a.shelf_num - b.shelf_num
-      );
-
-      const blob = new Blob([JSON.stringify(verifiedShelves, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
       a.download = "verified_library_shelves.json";
       a.click();
-      URL.revokeObjectURL(url);
-    });
+    };
 
     init();
   </script>

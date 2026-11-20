@@ -6,205 +6,90 @@
   <title>Find a Book — Library Map</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    * { box-sizing: border-box; font-family: system-ui, -apple-system, sans-serif; }
-    body { margin: 0; height: 100dvh; display: flex; flex-direction: column; background: #f3f4f6; }
-
-    header {
-      background: white;
-      padding: 14px 20px;
-      border-bottom: 1px solid #e5e7eb;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      justify-content: center;
-      flex-wrap: wrap;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-    }
-    input {
-      padding: 10px 12px;
-      font-size: 17px;
-      font-family: monospace;
-      border: 2px solid #d1d5db;
-      border-radius: 10px;
-      text-align: center;
-    }
-    #bookCodeInput { width: 175px; }
-    #volInput { width: 115px; }
-    input:focus { outline: none; border-color: #2563eb; }
-    button {
-      padding: 11px 20px;
-      font-size: 16px;
-      font-weight: 700;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-
-    #resultBanner {
-      text-align: center;
-      padding: 12px 16px;
-      font-size: 15px;
-      font-weight: 600;
-      background: #eff6ff;
-      color: #1e40af;
-      border-bottom: 1px solid #bfdbfe;
-      display: none;
-      line-height: 1.4;
-    }
-    #resultBanner.error { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
-
-    main {
-      flex: 1;
-      overflow: auto;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 16px;
-      touch-action: pan-x pan-y pinch-zoom;
-    }
-    main svg { max-width: 100%; max-height: 100%; height: auto; background: white; box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-
-    @keyframes pulseHighlight {
-      0%, 100% { fill: #ef4444 !important; }
-      50%      { fill: #f97316 !important; }
-    }
-    .found-column, .found-column * {
-      fill: #ef4444 !important;
-      stroke: #000000 !important;
-      stroke-width: 3px !important;
-      animation: pulseHighlight 1.2s infinite;
-    }
+    * { box-sizing:border-box; font-family:system-ui,-apple-system,sans-serif; }
+    body { margin:0; height:100dvh; display:flex; flex-direction:column; background:#f3f4f6; }
+    header { background:#fff; padding:12px 16px; border-bottom:1px solid #e5e7eb; display:flex; gap:8px; align-items:center; justify-content:center; flex-wrap:wrap; }
+    input { padding:10px; font-size:17px; font-family:monospace; border:2px solid #d1d5db; border-radius:10px; text-align:center; }
+    #codeIn { width:170px; }
+    #volIn { width:105px; }
+    button { padding:11px 18px; font-size:16px; font-weight:700; background:#2563eb; color:#fff; border:none; border-radius:10px; cursor:pointer; }
+    #banner { text-align:center; padding:10px 14px; font-size:15px; font-weight:600; background:#eff6ff; color:#1e40af; border-bottom:1px solid #bfdbfe; display:none; }
+    #banner.error { background:#fef2f2; color:#991b1b; border-color:#fecaca; }
+    main { flex:1; overflow:auto; display:flex; justify-content:center; align-items:center; padding:14px; touch-action:pan-x pan-y pinch-zoom; }
+    main svg { max-width:100%; max-height:100%; height:auto; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,.08); }
+    @keyframes pulse { 0%,100% { fill:#ef4444 !important; } 50% { fill:#f97316 !important; } }
+    .found, .found * { fill:#ef4444 !important; stroke:#000 !important; stroke-width:3px !important; animation:pulse 1.2s infinite; }
   </style>
 </head>
 <body>
-
   <header>
-    <input type="text" id="bookCodeInput" inputmode="decimal" placeholder="Book # (603.40)" />
-    <input type="number" id="volInput" inputmode="numeric" min="1" placeholder="Vol (opt.)" />
-    <button id="findBtn">Locate Book</button>
+    <input type="text" id="codeIn" inputmode="decimal" placeholder="Book # (603.40)" />
+    <input type="number" id="volIn" inputmode="numeric" min="1" placeholder="Vol (opt.)" />
+    <button id="findBtn">Locate</button>
   </header>
-
-  <div id="resultBanner"></div>
-  <main id="mapContainer"></main>
+  <div id="banner"></div>
+  <main id="map"></main>
 
   <script>
     const RAW_SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIMflO"; // <-- Replace with full key if truncated
-    const SVG_FILENAME = "libary_map.svg";
+    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIM"; // Paste full key
+    const db = window.supabase.createClient(
+      RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, ""),
+      SUPABASE_ANON_KEY.trim()
+    );
 
-    const cleanSupabaseUrl = RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, "");
-    const db = window.supabase.createClient(cleanSupabaseUrl, SUPABASE_ANON_KEY.trim());
-
-    let verifiedRanges = [];
-
-    const bookCodeInput = document.getElementById("bookCodeInput");
-    const volInput = document.getElementById("volInput");
-    const resultBanner = document.getElementById("resultBanner");
-    const mapContainer = document.getElementById("mapContainer");
+    let ranges = [];
+    const codeIn = document.getElementById("codeIn"), volIn = document.getElementById("volIn"), banner = document.getElementById("banner"), map = document.getElementById("map");
 
     async function init() {
-      const svgRes = await fetch(SVG_FILENAME);
-      mapContainer.innerHTML = await svgRes.text();
+      const [svgRes, sRes, rRes] = await Promise.all([
+        fetch("library_map.svg"),
+        db.from("shelf_submissions").select("*").order("created_at", { ascending: true }),
+        db.from("shelf_reports").select("*"),
+      ]);
+      map.innerHTML = await svgRes.text();
+      if (!sRes.data) return;
 
-      const { data } = await db.from("shelf_submissions").select("*");
-      if (!data) return;
-
-      const groups = new Map();
-      const canonical = new Map();
-      for (const row of data) {
-        if (row.status !== "indexed") continue;
-        const key = `${row.column_id}|${row.shelf_num}|${row.start_code}|${row.start_vol || 0}|${row.end_code}|${row.end_vol || 0}`;
-        groups.set(key, (groups.get(key) || 0) + 1);
-        canonical.set(key, row);
+      const subs = sRes.data, reps = rRes.data || [];
+      const latestMap = new Map();
+      for (const s of subs) {
+        if (reps.filter((r) => r.submission_id === s.id).length >= 2) continue; // Overruled
+        latestMap.set(`${s.column_id}|${s.shelf_num}`, s);
       }
 
-      verifiedRanges = [];
-      for (const [key, count] of groups.entries()) {
-        if (count >= 2) {
-          const r = canonical.get(key);
-          verifiedRanges.push({
-            column_id: r.column_id,
-            shelf_num: Number(r.shelf_num), // 0 = whole column edges, 1..5 = exact shelf
-            start: r.start_code,
-            start_vol: r.start_vol || 0,
-            end: r.end_code,
-            end_vol: r.end_vol || 0,
-          });
-        }
-      }
+      ranges = Array.from(latestMap.values())
+        .filter((r) => r.status === "indexed")
+        .map((r) => ({ col: r.column_id, shelf: Number(r.shelf_num), start: r.start_code, sVol: r.start_vol || 0, end: r.end_code, eVol: r.end_vol || 0 }));
     }
 
-    function formatDewey(raw) {
-      let val = raw.trim().toUpperCase();
-      if (!val.includes(".") && /^\d{4,}/.test(val)) {
-        val = val.slice(0, 3) + "." + val.slice(3);
-      }
-      return val;
+    const formatDewey = (v) => (!v.includes(".") && /^\d{4,}/.test(v.trim())) ? v.trim().slice(0, 3) + "." + v.trim().slice(3) : v.trim().toUpperCase();
+
+    function search() {
+      document.querySelectorAll(".found").forEach((el) => el.classList.remove("found"));
+      const q = formatDewey(codeIn.value);
+      codeIn.value = q;
+      if (!q) return;
+      const v = parseInt(volIn.value, 10) || 0;
+
+      let matches = ranges.filter((r) =>
+        (q > r.start || (q === r.start && (v === 0 || v >= r.sVol))) &&
+        (q < r.end || (q === r.end && (v === 0 || r.eVol === 0 || v <= r.eVol)))
+      );
+      const exactCols = new Set(matches.filter((m) => m.shelf > 0).map((m) => m.col));
+      matches = matches.filter((m) => m.shelf > 0 || !exactCols.has(m.col));
+
+      banner.style.display = "block";
+      if (!matches.length) { banner.className = "error"; banner.textContent = `Not found: ${q}${v ? " v." + v : ""}`; return; }
+
+      banner.className = "";
+      banner.textContent = matches.map((m) => {
+        document.getElementById(m.col)?.classList.add("found");
+        return `${m.col.toUpperCase()} — ${m.shelf === 0 ? "In column" : "Shelf " + m.shelf} (${m.start}${m.sVol ? " v." + m.sVol : ""}–${m.end}${m.eVol ? " v." + m.eVol : ""})`;
+      }).join(" | ");
     }
 
-    function matchesShelf(qCode, qVol, shelf) {
-      const afterStart =
-        qCode > shelf.start ||
-        (qCode === shelf.start && (qVol === 0 || qVol >= shelf.start_vol));
-
-      const beforeEnd =
-        qCode < shelf.end ||
-        (qCode === shelf.end && (qVol === 0 || shelf.end_vol === 0 || qVol <= shelf.end_vol));
-
-      return afterStart && beforeEnd;
-    }
-
-    function searchBook() {
-      document.querySelectorAll(".found-column").forEach((el) => el.classList.remove("found-column"));
-
-      const qCode = formatDewey(bookCodeInput.value);
-      bookCodeInput.value = qCode;
-      if (!qCode) return;
-
-      const qVolRaw = volInput.value.trim();
-      const qVol = qVolRaw ? parseInt(qVolRaw, 10) : 0;
-
-      let matches = verifiedRanges.filter((r) => matchesShelf(qCode, qVol, r));
-
-      // If exact shelf-level matches (shelf_num > 0) exist for a column, prefer them over column-edge estimates (shelf_num === 0)
-      const colsWithExactShelves = new Set(matches.filter((m) => m.shelf_num > 0).map((m) => m.column_id));
-      matches = matches.filter((m) => m.shelf_num > 0 || !colsWithExactShelves.has(m.column_id));
-
-      resultBanner.style.display = "block";
-      if (matches.length === 0) {
-        resultBanner.className = "error";
-        resultBanner.textContent = `No verified shelf found for "${qCode}"${qVol ? ` Vol. ${qVol}` : ""}.`;
-        return;
-      }
-
-      resultBanner.className = "";
-      const descriptions = matches.map((m) => {
-        const el = document.getElementById(m.column_id);
-        if (el) el.classList.add("found-column");
-        const sVol = m.start_vol ? ` (v.${m.start_vol})` : "";
-        const eVol = m.end_vol ? ` (v.${m.end_vol})` : "";
-        const shelfLocation = m.shelf_num === 0
-          ? "Anywhere in column"
-          : `Shelf ${m.shelf_num} from top`;
-        return `Column ${m.column_id.toUpperCase()} — ${shelfLocation} (${m.start}${sVol} – ${m.end}${eVol})`;
-      });
-
-      const multiNote = (matches.length > 1 && qVol === 0)
-        ? " — Enter a volume number above to narrow it down."
-        : "";
-
-      resultBanner.textContent = `Found at: ${descriptions.join(" | ")}${multiNote}`;
-    }
-
-    document.getElementById("findBtn").addEventListener("click", searchBook);
-    [bookCodeInput, volInput].forEach((inp) => {
-      inp.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") searchBook();
-      });
-    });
-
+    document.getElementById("findBtn").onclick = search;
+    [codeIn, volIn].forEach((i) => (i.onkeydown = (e) => { if (e.key === "Enter") search(); }));
     init();
   </script>
 </body>
