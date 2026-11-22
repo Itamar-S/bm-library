@@ -42,19 +42,16 @@
     const codeIn = document.getElementById("codeIn"), volIn = document.getElementById("volIn"), banner = document.getElementById("banner"), map = document.getElementById("map");
 
     async function init() {
-      const [svgRes, sRes, rRes] = await Promise.all([
-        fetch("library_map.svg"),
+      const [svgRes, sRes] = await Promise.all([
+        fetch("libary_map.svg"),
         db.from("shelf_submissions").select("*").order("created_at", { ascending: true }),
-        db.from("shelf_reports").select("*"),
       ]);
       map.innerHTML = await svgRes.text();
       if (!sRes.data) return;
 
-      const subs = sRes.data, reps = rRes.data || [];
       const latestMap = new Map();
-      for (const s of subs) {
-        if (reps.filter((r) => r.submission_id === s.id).length >= 2) continue; // Overruled
-        latestMap.set(`${s.column_id}|${s.shelf_num}`, s);
+      for (const s of sRes.data) {
+        if (s.shelf_num >= 1) latestMap.set(`${s.column_id}|${s.shelf_num}`, s);
       }
 
       ranges = Array.from(latestMap.values())
@@ -71,12 +68,10 @@
       if (!q) return;
       const v = parseInt(volIn.value, 10) || 0;
 
-      let matches = ranges.filter((r) =>
+      const matches = ranges.filter((r) =>
         (q > r.start || (q === r.start && (v === 0 || v >= r.sVol))) &&
         (q < r.end || (q === r.end && (v === 0 || r.eVol === 0 || v <= r.eVol)))
       );
-      const exactCols = new Set(matches.filter((m) => m.shelf > 0).map((m) => m.col));
-      matches = matches.filter((m) => m.shelf > 0 || !exactCols.has(m.col));
 
       banner.style.display = "block";
       if (!matches.length) { banner.className = "error"; banner.textContent = `Not found: ${q}${v ? " v." + v : ""}`; return; }
@@ -84,7 +79,7 @@
       banner.className = "";
       banner.textContent = matches.map((m) => {
         document.getElementById(m.col)?.classList.add("found");
-        return `${m.col.toUpperCase()} — ${m.shelf === 0 ? "In column" : "Shelf " + m.shelf} (${m.start}${m.sVol ? " v." + m.sVol : ""}–${m.end}${m.eVol ? " v." + m.eVol : ""})`;
+        return `${m.col.toUpperCase()} — Shelf ${m.shelf} (${m.start}${m.sVol ? " v." + m.sVol : ""}–${m.end}${m.eVol ? " v." + m.eVol : ""})`;
       }).join(" | ");
     }
 

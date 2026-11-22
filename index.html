@@ -6,7 +6,7 @@
   <title>Library Map Indexer</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    :root { --bg:#f3f4f6; --card:#fff; --border:#e5e7eb; --text:#111827; --muted:#6b7280; --green:#22c55e; --yellow:#eab308; --red:#ef4444; --blue:#2563eb; }
+    :root { --bg:#f3f4f6; --card:#fff; --border:#e5e7eb; --text:#111827; --muted:#6b7280; --green:#22c55e; --blue:#2563eb; }
     * { box-sizing:border-box; font-family:system-ui,-apple-system,sans-serif; }
     body { margin:0; height:100dvh; display:flex; flex-direction:column; background:var(--bg); color:var(--text); overflow:hidden; }
     header { background:var(--card); border-bottom:1px solid var(--border); padding:8px 14px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; z-index:20; }
@@ -14,22 +14,18 @@
     .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:4px; }
     button { border:1px solid var(--border); background:var(--card); color:var(--text); padding:7px 11px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
     button.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
-    button.danger { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+    button.edit { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
     button:disabled { opacity:0.5; cursor:not-allowed; }
     .workspace { flex:1; display:flex; position:relative; overflow:hidden; }
     #mapWrapper { flex:1; overflow:auto; display:flex; justify-content:center; align-items:center; padding:12px; touch-action:pan-x pan-y pinch-zoom; }
     #mapWrapper svg { max-width:100%; max-height:100%; height:auto; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,.08); }
     .col-node { cursor:pointer; }
     .col-complete, .col-complete * { fill:#22c55e !important; stroke:#15803d !important; }
-    .col-edges, .col-edges *       { fill:#facc15 !important; stroke:#a16207 !important; }
     .col-selected, .col-selected * { stroke:#2563eb !important; stroke-width:3px !important; }
     #drawer { width:430px; max-width:100%; background:var(--card); border-left:1px solid var(--border); display:flex; flex-direction:column; z-index:30; box-shadow:-4px 0 20px rgba(0,0,0,.08); }
     #drawer.hidden { display:none; }
     .drawer-header { padding:10px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
     .drawer-header h2 { margin:0; font-size:17px; }
-    .granularity-bar { display:flex; gap:6px; padding:8px 14px; background:#f9fafb; border-bottom:1px solid var(--border); }
-    .gran-btn { flex:1; padding:6px; font-size:12px; }
-    .gran-btn.active { background:var(--blue); color:#fff; border-color:var(--blue); }
     .shelf-list { flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:10px; }
     .shelf-card { border:1px solid var(--border); border-radius:10px; padding:9px 11px; background:#fafafa; }
     .shelf-card.verified { background:#f0fdf4; border-color:#86efac; }
@@ -55,8 +51,7 @@
     <div class="legend">
       <strong>Indexer</strong>
       <span><i class="dot" style="background:#d1d5db"></i>Open</span>
-      <span><i class="dot" style="background:#eab308"></i>Edges Only</span>
-      <span><i class="dot" style="background:#22c55e"></i>Verified</span>
+      <span><i class="dot" style="background:#22c55e"></i>Indexed</span>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <span id="stats" style="font-size:12px;color:var(--muted);">Loading...</span>
@@ -70,10 +65,6 @@
       <div class="drawer-header">
         <h2 id="drawerTitle">Column —</h2>
         <button id="closeBtn">✕</button>
-      </div>
-      <div class="granularity-bar">
-        <button type="button" id="modeShelvesBtn" class="gran-btn active">All Shelves</button>
-        <button type="button" id="modeEdgesBtn" class="gran-btn">Edges Only</button>
       </div>
       <div id="shelfList" class="shelf-list"></div>
       <div class="drawer-footer" id="drawerFooter"></div>
@@ -93,8 +84,10 @@
 
     const colRegex = /^([a-zA-Z]+)(\d+)(_\d+)?$/;
     const columns = new Map();
-    let allSubs = [], allReports = [], catalog = [];
-    let activeColId = null, granularity = "shelves";
+    let latestSubs = new Map(); // "colId|shelfNum" -> latest row
+    let catalog = [];
+    let activeColId = null;
+    let isEditingExisting = false;
 
     const mapWrapper = document.getElementById("mapWrapper");
     const drawer = document.getElementById("drawer");
@@ -102,8 +95,6 @@
     const shelfList = document.getElementById("shelfList");
     const drawerFooter = document.getElementById("drawerFooter");
     const stats = document.getElementById("stats");
-    const modeShelvesBtn = document.getElementById("modeShelvesBtn");
-    const modeEdgesBtn = document.getElementById("modeEdgesBtn");
 
     const getShelfCount = (letter) => ["d", "e", "f", "g"].includes(letter.toLowerCase()) ? 3 : 5;
     const formatDewey = (v) => (!v.includes(".") && /^\d{4,}/.test(v.trim())) ? v.trim().slice(0, 3) + "." + v.trim().slice(3) : v.trim();
@@ -126,31 +117,13 @@
       return idx !== -1 ? { exists: true, next: catalog[idx + 1] || null } : { exists: false, next: null };
     }
 
-    // Active submission = latest submission for (colId, shelfNum) unless overruled by majority reports
-    function getActiveSub(colId, shelfNum) {
-      const subs = allSubs.filter((s) => s.column_id === colId && s.shelf_num === shelfNum);
-      for (let i = subs.length - 1; i >= 0; i--) {
-        const sub = subs[i];
-        const reps = allReports.filter((r) => r.submission_id === sub.id);
-        // Overruled if >= 2 independent error reports exist against this submission
-        if (reps.length < 2) {
-          return { sub, reportCount: reps.length, reportedByMe: reps.some((r) => r.session_id === sessionId) };
-        }
-      }
-      return null;
-    }
-
     function getColumnState(colId) {
       const col = columns.get(colId);
       const shelves = [];
-      for (let i = 1; i <= col.shelfCount; i++) shelves.push(getActiveSub(colId, i));
-      if (shelves.every(Boolean)) return { status: "complete", shelves };
-      const edges = getActiveSub(colId, 0);
-      if (edges) return { status: "edges", edges };
-      return { status: "open" };
+      for (let i = 1; i <= col.shelfCount; i++) shelves.push(latestSubs.get(`${colId}|${i}`) || null);
+      return shelves.every(Boolean) ? { status: "complete", shelves } : { status: "open" };
     }
 
-    // Find immediately preceding column (e.g. r10 -> r11, or previous column in natural order)
     function getPrefillFromPrevColumn(colId) {
       const ordered = Array.from(columns.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
       const idx = ordered.indexOf(colId);
@@ -158,15 +131,11 @@
       const prevId = ordered[idx - 1];
       const prevCol = columns.get(prevId);
       const prevState = getColumnState(prevId);
+      if (prevState.status !== "complete") return null;
 
       let lastSub = null;
-      if (prevState.status === "complete") {
-        // Walk backwards from bottom shelf to find last 'indexed' shelf
-        for (let i = prevCol.shelfCount - 1; i >= 0; i--) {
-          if (prevState.shelves[i].sub.status === "indexed") { lastSub = prevState.shelves[i].sub; break; }
-        }
-      } else if (prevState.status === "edges" && prevState.edges.sub.status === "indexed") {
-        lastSub = prevState.edges.sub;
+      for (let i = prevCol.shelfCount - 1; i >= 0; i--) {
+        if (prevState.shelves[i].status === "indexed") { lastSub = prevState.shelves[i]; break; }
       }
       if (!lastSub) return null;
 
@@ -178,7 +147,7 @@
 
     async function init() {
       const [svgRes, catRes] = await Promise.all([
-        fetch("library_map.svg"),
+        fetch("libary_map.svg"),
         fetch("catalog_index.json").catch(() => null),
       ]);
       mapWrapper.innerHTML = await svgRes.text();
@@ -198,17 +167,17 @@
       await reloadData();
       db.channel("live")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "shelf_submissions" }, () => reloadData())
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "shelf_reports" }, () => reloadData())
         .subscribe();
     }
 
     async function reloadData() {
-      const [sRes, rRes] = await Promise.all([
-        db.from("shelf_submissions").select("*").order("created_at", { ascending: true }),
-        db.from("shelf_reports").select("*"),
-      ]);
-      if (sRes.data) allSubs = sRes.data;
-      if (rRes.data) allReports = rRes.data;
+      const { data } = await db.from("shelf_submissions").select("*").order("created_at", { ascending: true });
+      if (data) {
+        latestSubs.clear();
+        for (const row of data) {
+          if (row.shelf_num >= 1) latestSubs.set(`${row.column_id}|${row.shelf_num}`, row);
+        }
+      }
       refreshMap();
       if (activeColId) renderDrawer();
     }
@@ -216,30 +185,25 @@
     function refreshMap() {
       let done = 0;
       columns.forEach((col) => {
-        col.el.classList.remove("col-complete", "col-edges");
-        const st = getColumnState(col.id).status;
-        if (st === "complete") { col.el.classList.add("col-complete"); done++; }
-        else if (st === "edges") col.el.classList.add("col-edges");
+        col.el.classList.remove("col-complete");
+        if (getColumnState(col.id).status === "complete") { col.el.classList.add("col-complete"); done++; }
       });
-      stats.textContent = `${done}/${columns.size} verified`;
+      stats.textContent = `${done}/${columns.size} indexed`;
     }
 
-    modeShelvesBtn.onclick = () => { granularity = "shelves"; modeShelvesBtn.classList.add("active"); modeEdgesBtn.classList.remove("active"); renderDrawer(); };
-    modeEdgesBtn.onclick = () => { granularity = "edges"; modeEdgesBtn.classList.add("active"); modeShelvesBtn.classList.remove("active"); renderDrawer(); };
     document.getElementById("closeBtn").onclick = () => {
       drawer.classList.add("hidden");
       if (activeColId) columns.get(activeColId).el.classList.remove("col-selected");
       activeColId = null;
+      isEditingExisting = false;
     };
 
     function openDrawer(colId) {
       if (activeColId) columns.get(activeColId).el.classList.remove("col-selected");
       activeColId = colId;
+      isEditingExisting = false;
       columns.get(colId).el.classList.add("col-selected");
       drawerTitle.textContent = `Column ${colId.toUpperCase()}`;
-
-      const st = getColumnState(colId).status;
-      if (st === "complete") { granularity = "shelves"; modeShelvesBtn.classList.add("active"); modeEdgesBtn.classList.remove("active"); }
       renderDrawer();
       drawer.classList.remove("hidden");
     }
@@ -247,28 +211,30 @@
     function renderDrawer() {
       const col = columns.get(activeColId);
       const colState = getColumnState(activeColId);
+      const isComplete = colState.status === "complete";
+      const isLocked = isComplete && !isEditingExisting;
+
       shelfList.innerHTML = "";
       drawerFooter.innerHTML = "";
 
-      const isLocked = (granularity === "shelves" && colState.status === "complete") ||
-                       (granularity === "edges" && (colState.status === "edges" || colState.status === "complete"));
+      const rows = Array.from({ length: col.shelfCount }, (_, i) => ({
+        num: i + 1,
+        label: `Shelf ${i + 1}`,
+        sub: colState.shelves ? colState.shelves[i] : null,
+      }));
 
-      const rows = granularity === "edges"
-        ? [{ num: 0, label: `Column Edges (1–${col.shelfCount})`, active: colState.edges || (colState.status === "complete" ? colState.shelves[0] : null) }]
-        : Array.from({ length: col.shelfCount }, (_, i) => ({ num: i + 1, label: `Shelf ${i + 1}`, active: colState.shelves ? colState.shelves[i] : null }));
-
-      const prevPrefill = !isLocked ? getPrefillFromPrevColumn(activeColId) : null;
+      const prevPrefill = !isComplete ? getPrefillFromPrevColumn(activeColId) : null;
 
       rows.forEach((r, idx) => {
         const card = document.createElement("div");
-        card.className = `shelf-card ${isLocked ? "verified" : ""}`;
+        card.className = `shelf-card ${isComplete ? "verified" : ""}`;
         card.dataset.num = r.num;
-        card.dataset.mode = "indexed";
+        card.dataset.mode = r.sub ? r.sub.status : "indexed";
 
         card.innerHTML = `
           <div class="shelf-top">
             <span>${r.label}</span>
-            <span style="font-size:11px;color:${isLocked ? "#15803d" : "#6b7280"}">${isLocked ? "Verified ✓" : "Required"}</span>
+            <span style="font-size:11px;color:${isComplete ? "#15803d" : "#6b7280"}">${isLocked ? "Saved ✓" : "Required"}</span>
           </div>
           <div class="inputs-row">
             <input type="text" inputmode="decimal" class="code-in start-in" placeholder="Left 503.42" />
@@ -290,22 +256,24 @@
         const fb = card.querySelector(".cat-fb");
         const btns = card.querySelectorAll(".mode-btn");
 
-        if (isLocked && r.active) {
-          const sub = r.active.sub;
-          [sIn, sVol, eIn, eVol, ...btns].forEach((el) => (el.disabled = true));
-          if (sub.status === "indexed") {
-            sIn.value = sub.start_code; sVol.value = sub.start_vol || "";
-            eIn.value = sub.end_code; eVol.value = sub.end_vol || "";
+        // Populate existing values if present (both in locked view and when editing)
+        if (r.sub) {
+          btns.forEach((b) => b.classList.toggle("active", b.dataset.m === r.sub.status));
+          if (r.sub.status === "indexed") {
+            sIn.value = r.sub.start_code; sVol.value = r.sub.start_vol || "";
+            eIn.value = r.sub.end_code; eVol.value = r.sub.end_vol || "";
           } else {
-            sIn.placeholder = sub.status.toUpperCase();
+            [sIn, sVol, eIn, eVol].forEach((inp) => (inp.disabled = true));
+            sIn.placeholder = r.sub.status.toUpperCase();
           }
-        } else {
-          // Prefill first shelf from previous verified column
-          if (idx === 0 && prevPrefill) {
-            sIn.value = prevPrefill.code;
-            sVol.value = prevPrefill.vol;
-          }
+        } else if (idx === 0 && prevPrefill) {
+          sIn.value = prevPrefill.code;
+          sVol.value = prevPrefill.vol;
+        }
 
+        if (isLocked) {
+          [sIn, sVol, eIn, eVol, ...btns].forEach((el) => (el.disabled = true));
+        } else {
           btns.forEach((b) => {
             b.onclick = () => {
               btns.forEach((x) => x.classList.remove("active"));
@@ -318,7 +286,7 @@
             };
           });
 
-          let endTouched = false;
+          let endTouched = Boolean(r.sub);
           sIn.oninput = () => {
             sIn.value = formatDewey(sIn.value);
             if (!endTouched && !eIn.value && sIn.value.includes(".")) eIn.value = sIn.value.split(".")[0] + ".";
@@ -340,33 +308,19 @@
       });
 
       if (isLocked) {
-        // Error report button (2 independent reports overrule and unlock the column)
-        const targetSubs = rows.map((r) => r.active).filter(Boolean);
-        const maxReps = Math.max(...targetSubs.map((t) => t.reportCount));
-        const alreadyReported = targetSubs.some((t) => t.reportedByMe);
-
-        const repBtn = document.createElement("button");
-        repBtn.className = "danger";
-        repBtn.disabled = alreadyReported;
-        repBtn.textContent = alreadyReported
-          ? `Reported (${maxReps}/2 to overrule)`
-          : `Report Error (${maxReps}/2 reports)`;
-        repBtn.onclick = async () => {
-          repBtn.disabled = true;
-          const payload = targetSubs.map((t) => ({ submission_id: t.sub.id, column_id: activeColId, session_id: sessionId }));
-          const { error } = await db.from("shelf_reports").insert(payload);
-          if (error) alert(error.message);
-          await reloadData();
-        };
-        drawerFooter.appendChild(repBtn);
+        const editBtn = document.createElement("button");
+        editBtn.className = "edit";
+        editBtn.textContent = "Edit / Correct Column";
+        editBtn.onclick = () => { isEditingExisting = true; renderDrawer(); };
+        drawerFooter.appendChild(editBtn);
       } else {
         const subBtn = document.createElement("button");
         subBtn.className = "primary";
-        subBtn.textContent = granularity === "edges" ? "Save Column Edges" : `Save All ${col.shelfCount} Shelves`;
+        subBtn.textContent = `Save All ${col.shelfCount} Shelves`;
         subBtn.onclick = saveColumn;
         drawerFooter.appendChild(subBtn);
 
-        const firstEmpty = Array.from(shelfList.querySelectorAll(".start-in")).find((i) => !i.value) || shelfList.querySelector(".end-in");
+        const firstEmpty = Array.from(shelfList.querySelectorAll(".start-in:not(:disabled)")).find((i) => !i.value) || shelfList.querySelector(".end-in:not(:disabled)");
         if (firstEmpty) firstEmpty.focus();
       }
     }
@@ -415,7 +369,7 @@
         if (mode === "indexed") {
           const start = c.querySelector(".start-in").value.trim();
           const end = c.querySelector(".end-in").value.trim();
-          if (!start || !end) { alert(`Please fill out all shelves before saving (missing ${num === 0 ? "Edges" : "Shelf " + num}).`); return; }
+          if (!start || !end) { alert(`Please fill out all shelves before saving (missing Shelf ${num}).`); return; }
           rows.push({
             column_id: activeColId, shelf_num: num, status: "indexed",
             start_code: start, start_vol: parseInt(c.querySelector(".start-vol").value, 10) || null,
@@ -431,20 +385,25 @@
       btn.disabled = true;
       const { error } = await db.from("shelf_submissions").insert(rows);
       btn.disabled = false;
-      if (error) alert("Error: " + error.message);
-      else await reloadData();
+      if (error) {
+        alert("Error: " + error.message);
+      } else {
+        isEditingExisting = false;
+        await reloadData();
+      }
     }
 
     document.getElementById("exportBtn").onclick = () => {
       const out = [];
       columns.forEach((col) => {
         const st = getColumnState(col.id);
-        const list = st.status === "complete" ? st.shelves : (st.status === "edges" ? [st.edges] : []);
-        list.forEach((item) => {
-          if (item.sub.status === "indexed") {
-            out.push({ column_id: col.id, shelf_num: item.sub.shelf_num, start: item.sub.start_code, start_vol: item.sub.start_vol, end: item.sub.end_code, end_vol: item.sub.end_vol });
-          }
-        });
+        if (st.status === "complete") {
+          st.shelves.forEach((sub) => {
+            if (sub.status === "indexed") {
+              out.push({ column_id: col.id, shelf_num: sub.shelf_num, start: sub.start_code, start_vol: sub.start_vol, end: sub.end_code, end_vol: sub.end_vol });
+            }
+          });
+        }
       });
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
