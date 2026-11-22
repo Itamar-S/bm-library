@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>חיפוש ספרים בקטלוג</title>
+  <title>קטלוג הספרייה — חיפוש ספרים</title>
   <script src="config.js"></script>
   <style>
     :root { --bg:#f3f4f6; --card:#ffffff; --border:#e5e7eb; --text:#111827; --muted:#6b7280; --blue:#2563eb; }
@@ -18,7 +18,7 @@
     .header-inner { max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
     .top-row { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
     .top-row h1 { margin:0; font-size:18px; }
-    .nav-links { display:flex; gap:10px; font-size:13px; }
+    .nav-links { display:flex; gap:12px; font-size:13px; }
     .nav-links a { color:var(--blue); text-decoration:none; font-weight:600; }
 
     .search-bar { display:flex; gap:8px; flex-wrap:wrap; }
@@ -27,9 +27,9 @@
       border:2px solid #d1d5db; border-radius:10px; outline:none;
     }
     #searchInput:focus { border-color:var(--blue); }
-    select, .clear-btn {
-      padding:10px 12px; font-size:14px; border:1px solid #d1d5db;
-      border-radius:10px; background:white; cursor:pointer;
+    .clear-btn {
+      padding:10px 14px; font-size:14px; border:1px solid #d1d5db;
+      border-radius:10px; background:white; cursor:pointer; font-weight:600;
     }
 
     .meta-bar {
@@ -45,31 +45,59 @@
     .book-card {
       background:var(--card); border:1px solid var(--border); border-radius:12px;
       padding:12px 16px; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+      cursor:pointer; transition:border-color 0.15s, box-shadow 0.15s;
     }
+    .book-card:hover { border-color:var(--blue); box-shadow:0 3px 10px rgba(37,99,235,.08); }
     .book-info { flex:1; min-width:0; }
     .book-title { font-size:16px; font-weight:700; margin:0 0 4px 0; }
     .book-alt { font-size:13px; color:var(--muted); margin-bottom:4px; direction:ltr; text-align:right; }
     .book-author { font-size:14px; color:#1f2937; margin-bottom:6px; }
     .book-tags { display:flex; gap:6px; flex-wrap:wrap; font-size:12px; }
     .tag { background:#f3f4f6; color:#374151; padding:3px 8px; border-radius:6px; }
-    .tag.status { background:#dcfce7; color:#166534; }
+    .tag.has-desc { background:#eff6ff; color:#1d4ed8; font-weight:600; }
 
-    .code-box {
-      display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0;
-    }
     .code-badge {
       font-family:monospace; font-size:16px; font-weight:700; direction:ltr;
       background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;
-      padding:6px 10px; border-radius:8px;
-    }
-    .map-placeholder {
-      font-size:11px; color:var(--muted); text-decoration:none;
+      padding:6px 10px; border-radius:8px; flex-shrink:0;
     }
 
     #loadMoreBtn {
       align-self:center; padding:10px 20px; font-size:14px; font-weight:600;
       background:white; border:1px solid #d1d5db; border-radius:10px; cursor:pointer;
       display:none;
+    }
+
+    /* Description Modal */
+    .modal-backdrop {
+      position:fixed; inset:0; z-index:50;
+      background:rgba(17,24,39,.55);
+      display:flex; justify-content:center; align-items:center;
+      padding:16px;
+    }
+    .modal-backdrop.hidden { display:none; }
+    .modal-card {
+      background:var(--card); border-radius:16px; width:100%; max-width:560px;
+      max-height:85dvh; display:flex; flex-direction:column;
+      box-shadow:0 20px 40px rgba(0,0,0,.22); overflow:hidden;
+    }
+    .modal-header {
+      padding:14px 18px; border-bottom:1px solid var(--border);
+      display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    }
+    .modal-header h2 { margin:0; font-size:18px; line-height:1.35; }
+    .close-modal {
+      background:#f3f4f6; border:none; border-radius:8px;
+      width:34px; height:34px; font-size:16px; font-weight:700; cursor:pointer; flex-shrink:0;
+    }
+    .modal-body {
+      padding:16px 18px; overflow-y:auto;
+    }
+    .desc-text {
+      font-size:15px; line-height:1.7; white-space:pre-wrap; margin:0; color:#1f2937;
+    }
+    .no-desc {
+      font-size:14px; color:var(--muted); margin:0; text-align:center; padding:16px 0;
     }
   </style>
 </head>
@@ -80,8 +108,9 @@
       <div class="top-row">
         <h1>קטלוג הספרייה</h1>
         <div class="nav-links">
-            <a href="search.html">איתור במפה</a>
-            <a href="mapping.html">מיפוי מדפים</a>
+          <a href="browse.html">מדורים</a>
+          <a href="search.html">איתור במפה</a>
+          <a href="mapping.html">מיפוי מדפים</a>
         </div>
       </div>
 
@@ -92,9 +121,6 @@
           placeholder="חיפוש חופשי: מספר מיון (700.01), מחבר (ר' סעדיה גאון) או שם ספר (האמונות והדעות)..."
           autocomplete="off"
         />
-        <select id="sectionFilter">
-          <option value="">כל המדורים</option>
-        </select>
         <button type="button" id="clearBtn" class="clear-btn">נקה</button>
       </div>
     </div>
@@ -102,7 +128,7 @@
 
   <div class="meta-bar">
     <span id="resultCount">טוען קטלוג...</span>
-    <span>100.01 – 999.99</span>
+    <span>לחצו על ספר לצפייה בתיאור</span>
   </div>
 
   <main>
@@ -110,8 +136,23 @@
     <button type="button" id="loadMoreBtn">הצג תוצאות נוספות</button>
   </main>
 
+  <!-- Description-Only Modal -->
+  <div id="bookModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle">—</h2>
+          <div id="modalCode" style="font-family:monospace;font-size:13px;color:var(--blue);font-weight:700;margin-top:4px;direction:ltr;text-align:right;"></div>
+        </div>
+        <button type="button" id="closeModalBtn" class="close-modal" aria-label="סגור">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
   <script>
-    const CATALOG_FILE = (window.APP_CONFIG && window.APP_CONFIG.BOOKS_CATALOG_JSON) || "books_catalog.json";
+    const cfg = window.APP_CONFIG || {};
+    const CATALOG_FILE = cfg.BOOKS_CATALOG_JSON || "books_catalog.json";
     const PAGE_SIZE = 60;
 
     let books = [];
@@ -119,17 +160,19 @@
     let renderedCount = 0;
 
     const searchInput = document.getElementById("searchInput");
-    const sectionFilter = document.getElementById("sectionFilter");
     const resultCount = document.getElementById("resultCount");
     const resultsList = document.getElementById("resultsList");
     const loadMoreBtn = document.getElementById("loadMoreBtn");
+    const bookModal = document.getElementById("bookModal");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalCode = document.getElementById("modalCode");
+    const modalBody = document.getElementById("modalBody");
 
-    // Normalize Hebrew & punctuation so partial queries match regardless of geresh/niqqud/double-letters
     function normalizeText(str) {
       if (!str) return "";
       return str
         .toLowerCase()
-        .replace(/[\u0591-\u05C7]/g, "")   // strip niqqud
+        .replace(/[\u0591-\u05C7]/g, "")
         .replace(/['"׳״\-–—.,:;()[\]/\\]/g, " ")
         .replace(/וו/g, "ו")
         .replace(/יי/g, "י")
@@ -143,22 +186,12 @@
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const rawBooks = await res.json();
 
-        const sections = new Set();
         books = rawBooks.map((b) => {
           const normTitle = normalizeText(`${b.title || ""} ${b.alt_title || ""} ${b.in_book || ""}`);
-          const normAuthor = normalizeText(b.author || "");
-          const normSection = normalizeText(b.section || "");
-          const normAll = `${b.code} ${normTitle} ${normAuthor} ${normSection} ${normalizeText(b.publisher || "")}`;
-
-          if (b.section) sections.add(b.section);
+          const normAuthor = normalizeText(`${b.author || ""} ${b.contributors || ""}`);
+          const normNotes = normalizeText(b.notes || "");
+          const normAll = `${b.code} ${normTitle} ${normAuthor} ${normalizeText(b.publisher || "")} ${normNotes}`;
           return { ...b, _title: normTitle, _author: normAuthor, _all: normAll };
-        });
-
-        Array.from(sections).sort((a, b) => a.localeCompare(b, "he")).forEach((sec) => {
-          const opt = document.createElement("option");
-          opt.value = sec;
-          opt.textContent = sec;
-          sectionFilter.appendChild(opt);
         });
 
         runSearch();
@@ -176,7 +209,6 @@
         return 0;
       }
 
-      // Every token must exist somewhere in the book's searchable fields
       for (let i = 0; i < tokens.length; i++) {
         if (!book._all.includes(tokens[i])) return 0;
       }
@@ -193,22 +225,16 @@
 
     function runSearch() {
       const rawTrimmed = searchInput.value.trim();
-      const secVal = sectionFilter.value;
       const normQuery = normalizeText(rawTrimmed);
       const tokens = normQuery ? normQuery.split(" ") : [];
       const isNumericQuery = /^\d{1,3}(\.\d*)?$/.test(rawTrimmed);
 
-      if (!normQuery && !secVal) {
+      if (!normQuery) {
         currentMatches = books;
       } else {
         const scored = [];
         for (let i = 0; i < books.length; i++) {
           const b = books[i];
-          if (secVal && b.section !== secVal) continue;
-          if (!normQuery) {
-            scored.push({ book: b, score: 1 });
-            continue;
-          }
           const sc = scoreBook(b, rawTrimmed, normQuery, tokens, isNumericQuery);
           if (sc > 0) scored.push({ book: b, score: sc });
         }
@@ -231,11 +257,10 @@
         card.className = "book-card";
 
         const tags = [];
-        if (b.publisher || b.year) tags.push(`<span class="tag">${[b.publisher, b.year].filter(Boolean).join(", ")}</span>`);
+        if (b.publisher || b.year) tags.push(`<span class="tag">${escapeHtml([b.publisher, b.year].filter(Boolean).join(", "))}</span>`);
         if (b.vols) tags.push(`<span class="tag">${b.vols} כרכים</span>`);
         if (b.copies) tags.push(`<span class="tag">${b.copies} עותקים</span>`);
-        if (b.section) tags.push(`<span class="tag">${b.section}</span>`);
-        if (b.status) tags.push(`<span class="tag status">${b.status}</span>`);
+        if (b.notes) tags.push(`<span class="tag has-desc">תיאור הספר</span>`);
 
         card.innerHTML = `
           <div class="book-info">
@@ -245,11 +270,9 @@
             ${b.author ? `<div class="book-author">${escapeHtml(b.author)}</div>` : ""}
             <div class="book-tags">${tags.join("")}</div>
           </div>
-          <div class="code-box">
-            <span class="code-badge">${escapeHtml(b.code)}</span>
-            <span class="map-placeholder">מיקום במפה (בקרוב)</span>
-          </div>
+          <span class="code-badge">${escapeHtml(b.code)}</span>
         `;
+        card.addEventListener("click", () => openBookModal(b));
         frag.appendChild(card);
       }
 
@@ -257,6 +280,27 @@
       renderedCount += slice.length;
       loadMoreBtn.style.display = renderedCount < currentMatches.length ? "block" : "none";
     }
+
+    function openBookModal(b) {
+      modalTitle.textContent = b.title || "ללא כותר";
+      modalCode.textContent = b.code;
+      modalBody.innerHTML = b.notes
+        ? `<p class="desc-text">${escapeHtml(b.notes)}</p>`
+        : `<p class="no-desc">אין תיאור זמין עבור ספר זה.</p>`;
+      bookModal.classList.remove("hidden");
+    }
+
+    function closeBookModal() {
+      bookModal.classList.add("hidden");
+    }
+
+    document.getElementById("closeModalBtn").addEventListener("click", closeBookModal);
+    bookModal.addEventListener("click", (e) => {
+      if (e.target === bookModal) closeBookModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !bookModal.classList.contains("hidden")) closeBookModal();
+    });
 
     function escapeHtml(s) {
       return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -267,10 +311,8 @@
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(runSearch, 120);
     });
-    sectionFilter.addEventListener("change", runSearch);
     document.getElementById("clearBtn").addEventListener("click", () => {
       searchInput.value = "";
-      sectionFilter.value = "";
       runSearch();
       searchInput.focus();
     });
