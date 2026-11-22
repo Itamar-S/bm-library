@@ -43,7 +43,7 @@
 
     async function init() {
       const [svgRes, sRes] = await Promise.all([
-        fetch("libary_map.svg"),
+        fetch("library_map.svg"),
         db.from("shelf_submissions").select("*").order("created_at", { ascending: true }),
       ]);
       map.innerHTML = await svgRes.text();

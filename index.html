@@ -147,7 +147,7 @@
 
     async function init() {
       const [svgRes, catRes] = await Promise.all([
-        fetch("libary_map.svg"),
+        fetch("library_map.svg"),
         fetch("catalog_index.json").catch(() => null),
       ]);
       mapWrapper.innerHTML = await svgRes.text();
