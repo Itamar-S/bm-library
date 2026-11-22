@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>מדורים ותת-מדורים — קטלוג הספרייה</title>
+  <script src="config.js"></script>
+  <style>
+    :root { --bg:#f3f4f6; --card:#ffffff; --border:#e5e7eb; --text:#111827; --muted:#6b7280; --blue:#2563eb; }
+    * { box-sizing:border-box; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+    body { margin:0; background:var(--bg); color:var(--text); min-height:100dvh; display:flex; flex-direction:column; }
+
+    header {
+      position:sticky; top:0; z-index:20;
+      background:var(--card); border-bottom:1px solid var(--border);
+      padding:14px 16px; box-shadow:0 2px 8px rgba(0,0,0,.04);
+    }
+    .header-inner { max-width:960px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+    .top-row { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+    .top-row h1 { margin:0; font-size:18px; }
+    .nav-links { display:flex; gap:12px; font-size:13px; }
+    .nav-links a { color:var(--blue); text-decoration:none; font-weight:600; }
+
+    .breadcrumbs {
+      display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+      font-size:14px; background:#f9fafb; padding:8px 12px; border-radius:8px; border:1px solid var(--border);
+    }
+    .crumb-btn {
+      background:none; border:none; padding:0; color:var(--blue);
+      font-size:14px; font-weight:700; cursor:pointer;
+    }
+    .crumb-btn:hover { text-decoration:underline; }
+    .crumb-current { font-weight:700; color:var(--text); }
+
+    main { max-width:960px; width:100%; margin:16px auto 28px; padding:0 16px; }
+
+    /* Grid for מדורים & תת-מדורים */
+    .grid {
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px;
+    }
+    .folder-card {
+      background:var(--card); border:1px solid var(--border); border-radius:12px;
+      padding:14px 16px; cursor:pointer; text-align:right;
+      display:flex; flex-direction:column; justify-content:space-between; gap:8px;
+      transition:border-color 0.15s, transform 0.1s;
+    }
+    .folder-card:hover { border-color:var(--blue); transform:translateY(-1px); }
+    .folder-top { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .num-pill {
+      font-family:monospace; font-size:16px; font-weight:700; direction:ltr;
+      background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;
+      padding:4px 9px; border-radius:8px;
+    }
+    .count-pill { font-size:12px; color:var(--muted); font-weight:600; }
+    .folder-title { font-size:15px; font-weight:700; color:var(--text); }
+    .folder-preview {
+      font-size:12px; color:var(--muted);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+
+    /* Book list inside a תת-מדור */
+    .book-list { display:flex; flex-direction:column; gap:10px; }
+    .book-card {
+      background:var(--card); border:1px solid var(--border); border-radius:12px;
+      padding:12px 16px; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+      cursor:pointer; transition:border-color 0.15s, box-shadow 0.15s;
+    }
+    .book-card:hover { border-color:var(--blue); box-shadow:0 3px 10px rgba(37,99,235,.08); }
+    .book-info { flex:1; min-width:0; }
+    .book-title { font-size:16px; font-weight:700; margin:0 0 4px 0; }
+    .book-alt { font-size:13px; color:var(--muted); margin-bottom:4px; direction:ltr; text-align:right; }
+    .book-author { font-size:14px; color:#1f2937; margin-bottom:6px; }
+    .book-tags { display:flex; gap:6px; flex-wrap:wrap; font-size:12px; }
+    .tag { background:#f3f4f6; color:#374151; padding:3px 8px; border-radius:6px; }
+    .tag.has-desc { background:#eff6ff; color:#1d4ed8; font-weight:600; }
+    .code-badge {
+      font-family:monospace; font-size:16px; font-weight:700; direction:ltr;
+      background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;
+      padding:6px 10px; border-radius:8px; flex-shrink:0;
+    }
+
+    /* Description Modal */
+    .modal-backdrop {
+      position:fixed; inset:0; z-index:50;
+      background:rgba(17,24,39,.55);
+      display:flex; justify-content:center; align-items:center;
+      padding:16px;
+    }
+    .modal-backdrop.hidden { display:none; }
+    .modal-card {
+      background:var(--card); border-radius:16px; width:100%; max-width:560px;
+      max-height:85dvh; display:flex; flex-direction:column;
+      box-shadow:0 20px 40px rgba(0,0,0,.22); overflow:hidden;
+    }
+    .modal-header {
+      padding:14px 18px; border-bottom:1px solid var(--border);
+      display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    }
+    .modal-header h2 { margin:0; font-size:18px; line-height:1.35; }
+    .close-modal {
+      background:#f3f4f6; border:none; border-radius:8px;
+      width:34px; height:34px; font-size:16px; font-weight:700; cursor:pointer; flex-shrink:0;
+    }
+    .modal-body {
+      padding:16px 18px; overflow-y:auto;
+    }
+    .desc-text {
+      font-size:15px; line-height:1.7; white-space:pre-wrap; margin:0; color:#1f2937;
+    }
+    .no-desc {
+      font-size:14px; color:var(--muted); margin:0; text-align:center; padding:16px 0;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div class="top-row">
+        <h1>עיון לפי מדורים ותת-מדורים</h1>
+        <div class="nav-links">
+          <a href="index.html">חיפוש חופשי</a>
+          <a href="search.html">איתור במפה</a>
+          <a href="mapping.html">מיפוי מדפים</a>
+        </div>
+      </div>
+      <div id="breadcrumbs" class="breadcrumbs">טוען קטלוג...</div>
+    </div>
+  </header>
+
+  <main id="content"></main>
+
+  <!-- Description-Only Modal -->
+  <div id="bookModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle">—</h2>
+          <div id="modalCode" style="font-family:monospace;font-size:13px;color:var(--blue);font-weight:700;margin-top:4px;direction:ltr;text-align:right;"></div>
+        </div>
+        <button type="button" id="closeModalBtn" class="close-modal" aria-label="סגור">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+
+  <script>
+    const cfg = window.APP_CONFIG || {};
+    const CATALOG_FILE = cfg.BOOKS_CATALOG_JSON || "books_catalog.json";
+    const SECTION_NAMES = cfg.SECTION_NAMES || {};
+
+    // Map<hundredKey ("700"), { key, label, totalBooks, subs: Map<subKey ("720"), { key, label, books: [] }> }>
+    const hierarchy = new Map();
+    let selectedMador = null;
+    let selectedSub = null;
+
+    const breadcrumbs = document.getElementById("breadcrumbs");
+    const content = document.getElementById("content");
+    const bookModal = document.getElementById("bookModal");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalCode = document.getElementById("modalCode");
+    const modalBody = document.getElementById("modalBody");
+
+    async function init() {
+      try {
+        const res = await fetch(CATALOG_FILE);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const books = await res.json();
+
+        for (const b of books) {
+          const intPart = parseInt(String(b.code).split(".")[0], 10);
+          if (isNaN(intPart) || intPart < 100 || intPart > 999) continue;
+
+          const madorKey = String(Math.floor(intPart / 100) * 100);
+          const subKey = String(intPart);
+
+          if (!hierarchy.has(madorKey)) {
+            hierarchy.set(madorKey, {
+              key: madorKey,
+              label: SECTION_NAMES[madorKey] || `מדור ${madorKey}`,
+              totalBooks: 0,
+              subs: new Map()
+            });
+          }
+          const mador = hierarchy.get(madorKey);
+          mador.totalBooks++;
+
+          if (!mador.subs.has(subKey)) {
+            mador.subs.set(subKey, {
+              key: subKey,
+              label: SECTION_NAMES[subKey] || `תת-מדור ${subKey}`,
+              books: []
+            });
+          }
+          mador.subs.get(subKey).books.push(b);
+        }
+
+        render();
+      } catch (err) {
+        breadcrumbs.textContent = `שגיאה בטעינת הקטלוג (${err.message})`;
+      }
+    }
+
+    function renderBreadcrumbs() {
+      breadcrumbs.innerHTML = "";
+
+      const rootBtn = document.createElement("button");
+      rootBtn.className = selectedMador ? "crumb-btn" : "crumb-current";
+      rootBtn.textContent = "כל המדורים (100–900)";
+      rootBtn.onclick = () => { selectedMador = null; selectedSub = null; render(); };
+      breadcrumbs.appendChild(rootBtn);
+
+      if (selectedMador) {
+        const mador = hierarchy.get(selectedMador);
+        breadcrumbs.appendChild(document.createTextNode(" / "));
+        const mBtn = document.createElement("button");
+        mBtn.className = selectedSub ? "crumb-btn" : "crumb-current";
+        mBtn.textContent = `${mador.label} (${mador.key})`;
+        mBtn.onclick = () => { selectedSub = null; render(); };
+        breadcrumbs.appendChild(mBtn);
+      }
+
+      if (selectedMador && selectedSub) {
+        const sub = hierarchy.get(selectedMador).subs.get(selectedSub);
+        breadcrumbs.appendChild(document.createTextNode(" / "));
+        const sSpan = document.createElement("span");
+        sSpan.className = "crumb-current";
+        sSpan.textContent = `${sub.label} (${sub.key})`;
+        breadcrumbs.appendChild(sSpan);
+      }
+    }
+
+    function render() {
+      renderBreadcrumbs();
+      content.innerHTML = "";
+
+      // Level 1: All big מדורים (100..900)
+      if (!selectedMador) {
+        const grid = document.createElement("div");
+        grid.className = "grid";
+
+        const sortedMadors = Array.from(hierarchy.values()).sort((a, b) => Number(a.key) - Number(b.key));
+        for (const m of sortedMadors) {
+          const sampleTitles = Array.from(m.subs.values())
+            .slice(0, 3)
+            .map((s) => s.books[0]?.title)
+            .filter(Boolean)
+            .join(" • ");
+
+          const card = document.createElement("div");
+          card.className = "folder-card";
+          card.innerHTML = `
+            <div class="folder-top">
+              <span class="num-pill">${m.key}–${Number(m.key) + 99}</span>
+              <span class="count-pill">${m.subs.size} תת-מדורים · ${m.totalBooks.toLocaleString()} ספרים</span>
+            </div>
+            <div class="folder-title">${escapeHtml(m.label)}</div>
+            <div class="folder-preview">${escapeHtml(sampleTitles)}</div>
+          `;
+          card.onclick = () => { selectedMador = m.key; render(); window.scrollTo(0, 0); };
+          grid.appendChild(card);
+        }
+        content.appendChild(grid);
+        return;
+      }
+
+      // Level 2: All תת-מדורים inside selected מדור
+      const mador = hierarchy.get(selectedMador);
+      if (!selectedSub) {
+        const grid = document.createElement("div");
+        grid.className = "grid";
+
+        const sortedSubs = Array.from(mador.subs.values()).sort((a, b) => Number(a.key) - Number(b.key));
+        for (const sub of sortedSubs) {
+          const firstTitle = sub.books[0]?.title || "";
+          const card = document.createElement("div");
+          card.className = "folder-card";
+          card.innerHTML = `
+            <div class="folder-top">
+              <span class="num-pill">${sub.key}</span>
+              <span class="count-pill">${sub.books.length.toLocaleString()} ספרים</span>
+            </div>
+            <div class="folder-title">${escapeHtml(sub.label)}</div>
+            <div class="folder-preview">${escapeHtml(firstTitle)}</div>
+          `;
+          card.onclick = () => { selectedSub = sub.key; render(); window.scrollTo(0, 0); };
+          grid.appendChild(card);
+        }
+        content.appendChild(grid);
+        return;
+      }
+
+      // Level 3: Book list inside selected תת-מדור
+      const sub = mador.subs.get(selectedSub);
+      const list = document.createElement("div");
+      list.className = "book-list";
+
+      for (const b of sub.books) {
+        const tags = [];
+        if (b.publisher || b.year) tags.push(`<span class="tag">${escapeHtml([b.publisher, b.year].filter(Boolean).join(", "))}</span>`);
+        if (b.vols) tags.push(`<span class="tag">${b.vols} כרכים</span>`);
+        if (b.copies) tags.push(`<span class="tag">${b.copies} עותקים</span>`);
+        if (b.notes) tags.push(`<span class="tag has-desc">תיאור הספר</span>`);
+
+        const card = document.createElement("article");
+        card.className = "book-card";
+        card.innerHTML = `
+          <div class="book-info">
+            <h2 class="book-title">${escapeHtml(b.title || "ללא כותר")}</h2>
+            ${b.alt_title ? `<div class="book-alt">${escapeHtml(b.alt_title)}</div>` : ""}
+            ${b.in_book ? `<div class="book-alt" style="direction:rtl;">בתוך: ${escapeHtml(b.in_book)}</div>` : ""}
+            ${b.author ? `<div class="book-author">${escapeHtml(b.author)}</div>` : ""}
+            <div class="book-tags">${tags.join("")}</div>
+          </div>
+          <span class="code-badge">${escapeHtml(b.code)}</span>
+        `;
+        card.addEventListener("click", () => openBookModal(b));
+        list.appendChild(card);
+      }
+      content.appendChild(list);
+    }
+
+    function openBookModal(b) {
+      modalTitle.textContent = b.title || "ללא כותר";
+      modalCode.textContent = b.code;
+      modalBody.innerHTML = b.notes
+        ? `<p class="desc-text">${escapeHtml(b.notes)}</p>`
+        : `<p class="no-desc">אין תיאור זמין עבור ספר זה.</p>`;
+      bookModal.classList.remove("hidden");
+    }
+
+    function closeBookModal() {
+      bookModal.classList.add("hidden");
+    }
+
+    document.getElementById("closeModalBtn").addEventListener("click", closeBookModal);
+    bookModal.addEventListener("click", (e) => {
+      if (e.target === bookModal) closeBookModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !bookModal.classList.contains("hidden")) closeBookModal();
+    });
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    init();
+  </script>
+</body>
+</html>
