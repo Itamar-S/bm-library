@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Find a Book — Library Map</title>
+  <script src="config.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     * { box-sizing:border-box; font-family:system-ui,-apple-system,sans-serif; }
@@ -31,10 +32,9 @@
   <main id="map"></main>
 
   <script>
-    const RAW_SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIM"; // Paste full key
+    const { SUPABASE_URL, SUPABASE_ANON_KEY, SVG_FILENAME } = window.APP_CONFIG;
     const db = window.supabase.createClient(
-      RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, ""),
+      SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, ""),
       SUPABASE_ANON_KEY.trim()
     );
 

@@ -1,415 +1,280 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Library Map Indexer</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>חיפוש ספרים בקטלוג</title>
+  <script src="config.js"></script>
   <style>
-    :root { --bg:#f3f4f6; --card:#fff; --border:#e5e7eb; --text:#111827; --muted:#6b7280; --green:#22c55e; --blue:#2563eb; }
-    * { box-sizing:border-box; font-family:system-ui,-apple-system,sans-serif; }
-    body { margin:0; height:100dvh; display:flex; flex-direction:column; background:var(--bg); color:var(--text); overflow:hidden; }
-    header { background:var(--card); border-bottom:1px solid var(--border); padding:8px 14px; display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; z-index:20; }
-    .legend { display:flex; gap:10px; font-size:12px; align-items:center; flex-wrap:wrap; }
-    .dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:4px; }
-    button { border:1px solid var(--border); background:var(--card); color:var(--text); padding:7px 11px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; }
-    button.primary { background:var(--blue); color:#fff; border-color:var(--blue); }
-    button.edit { background:#fef3c7; color:#92400e; border-color:#fcd34d; }
-    button:disabled { opacity:0.5; cursor:not-allowed; }
-    .workspace { flex:1; display:flex; position:relative; overflow:hidden; }
-    #mapWrapper { flex:1; overflow:auto; display:flex; justify-content:center; align-items:center; padding:12px; touch-action:pan-x pan-y pinch-zoom; }
-    #mapWrapper svg { max-width:100%; max-height:100%; height:auto; background:#fff; box-shadow:0 4px 16px rgba(0,0,0,.08); }
-    .col-node { cursor:pointer; }
-    .col-complete, .col-complete * { fill:#22c55e !important; stroke:#15803d !important; }
-    .col-selected, .col-selected * { stroke:#2563eb !important; stroke-width:3px !important; }
-    #drawer { width:430px; max-width:100%; background:var(--card); border-left:1px solid var(--border); display:flex; flex-direction:column; z-index:30; box-shadow:-4px 0 20px rgba(0,0,0,.08); }
-    #drawer.hidden { display:none; }
-    .drawer-header { padding:10px 14px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
-    .drawer-header h2 { margin:0; font-size:17px; }
-    .shelf-list { flex:1; overflow-y:auto; padding:10px 14px; display:flex; flex-direction:column; gap:10px; }
-    .shelf-card { border:1px solid var(--border); border-radius:10px; padding:9px 11px; background:#fafafa; }
-    .shelf-card.verified { background:#f0fdf4; border-color:#86efac; }
-    .shelf-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-weight:700; font-size:13px; }
-    .inputs-row { display:flex; gap:5px; align-items:center; margin-bottom:5px; }
-    .inputs-row input { padding:8px 5px; border:1px solid #d1d5db; border-radius:7px; font-size:15px; font-family:monospace; text-align:center; }
-    .inputs-row input.code-in { flex:2; min-width:74px; }
-    .inputs-row input.vol-in { flex:1; min-width:42px; max-width:54px; }
-    .inputs-row input:disabled { background:#e5e7eb; color:#374151; }
-    .cat-fb { font-size:11px; color:var(--muted); min-height:14px; margin-bottom:4px; }
-    .mode-toggles { display:flex; gap:5px; }
-    .mode-btn { flex:1; padding:5px; font-size:12px; }
-    .mode-btn.active { background:#1f2937; color:#fff; border-color:#1f2937; }
-    .drawer-footer { padding:10px 14px; border-top:1px solid var(--border); display:flex; gap:8px; }
-    .drawer-footer button { flex:1; min-height:42px; font-size:14px; }
-    @media (max-width:768px) {
-      #drawer { position:fixed; left:0; right:0; bottom:0; width:100%; height:75dvh; border-left:none; border-top:1px solid var(--border); border-radius:16px 16px 0 0; }
+    :root { --bg:#f3f4f6; --card:#ffffff; --border:#e5e7eb; --text:#111827; --muted:#6b7280; --blue:#2563eb; }
+    * { box-sizing:border-box; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+    body { margin:0; background:var(--bg); color:var(--text); min-height:100dvh; display:flex; flex-direction:column; }
+
+    header {
+      position:sticky; top:0; z-index:20;
+      background:var(--card); border-bottom:1px solid var(--border);
+      padding:14px 16px; box-shadow:0 2px 8px rgba(0,0,0,.04);
+    }
+    .header-inner { max-width:900px; margin:0 auto; display:flex; flex-direction:column; gap:10px; }
+    .top-row { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
+    .top-row h1 { margin:0; font-size:18px; }
+    .nav-links { display:flex; gap:10px; font-size:13px; }
+    .nav-links a { color:var(--blue); text-decoration:none; font-weight:600; }
+
+    .search-bar { display:flex; gap:8px; flex-wrap:wrap; }
+    #searchInput {
+      flex:1; min-width:220px; padding:12px 14px; font-size:16px;
+      border:2px solid #d1d5db; border-radius:10px; outline:none;
+    }
+    #searchInput:focus { border-color:var(--blue); }
+    select, .clear-btn {
+      padding:10px 12px; font-size:14px; border:1px solid #d1d5db;
+      border-radius:10px; background:white; cursor:pointer;
+    }
+
+    .meta-bar {
+      max-width:900px; width:100%; margin:10px auto 0; padding:0 16px;
+      font-size:13px; color:var(--muted); display:flex; justify-content:space-between;
+    }
+
+    main {
+      max-width:900px; width:100%; margin:10px auto 24px; padding:0 16px;
+      display:flex; flex-direction:column; gap:10px;
+    }
+
+    .book-card {
+      background:var(--card); border:1px solid var(--border); border-radius:12px;
+      padding:12px 16px; display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+    }
+    .book-info { flex:1; min-width:0; }
+    .book-title { font-size:16px; font-weight:700; margin:0 0 4px 0; }
+    .book-alt { font-size:13px; color:var(--muted); margin-bottom:4px; direction:ltr; text-align:right; }
+    .book-author { font-size:14px; color:#1f2937; margin-bottom:6px; }
+    .book-tags { display:flex; gap:6px; flex-wrap:wrap; font-size:12px; }
+    .tag { background:#f3f4f6; color:#374151; padding:3px 8px; border-radius:6px; }
+    .tag.status { background:#dcfce7; color:#166534; }
+
+    .code-box {
+      display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0;
+    }
+    .code-badge {
+      font-family:monospace; font-size:16px; font-weight:700; direction:ltr;
+      background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe;
+      padding:6px 10px; border-radius:8px;
+    }
+    .map-placeholder {
+      font-size:11px; color:var(--muted); text-decoration:none;
+    }
+
+    #loadMoreBtn {
+      align-self:center; padding:10px 20px; font-size:14px; font-weight:600;
+      background:white; border:1px solid #d1d5db; border-radius:10px; cursor:pointer;
+      display:none;
     }
   </style>
 </head>
 <body>
+
   <header>
-    <div class="legend">
-      <strong>Indexer</strong>
-      <span><i class="dot" style="background:#d1d5db"></i>Open</span>
-      <span><i class="dot" style="background:#22c55e"></i>Indexed</span>
-    </div>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <span id="stats" style="font-size:12px;color:var(--muted);">Loading...</span>
-      <button id="exportBtn">Export JSON</button>
+    <div class="header-inner">
+      <div class="top-row">
+        <h1>קטלוג הספרייה</h1>
+        <div class="nav-links">
+            <a href="search.html">איתור במפה</a>
+            <a href="mapping.html">מיפוי מדפים</a>
+        </div>
+      </div>
+
+      <div class="search-bar">
+        <input
+          type="search"
+          id="searchInput"
+          placeholder="חיפוש חופשי: מספר מיון (700.01), מחבר (ר' סעדיה גאון) או שם ספר (האמונות והדעות)..."
+          autocomplete="off"
+        />
+        <select id="sectionFilter">
+          <option value="">כל המדורים</option>
+        </select>
+        <button type="button" id="clearBtn" class="clear-btn">נקה</button>
+      </div>
     </div>
   </header>
 
-  <div class="workspace">
-    <main id="mapWrapper"></main>
-    <aside id="drawer" class="hidden">
-      <div class="drawer-header">
-        <h2 id="drawerTitle">Column —</h2>
-        <button id="closeBtn">✕</button>
-      </div>
-      <div id="shelfList" class="shelf-list"></div>
-      <div class="drawer-footer" id="drawerFooter"></div>
-    </aside>
+  <div class="meta-bar">
+    <span id="resultCount">טוען קטלוג...</span>
+    <span>100.01 – 999.99</span>
   </div>
 
+  <main>
+    <div id="resultsList" style="display:flex;flex-direction:column;gap:10px;"></div>
+    <button type="button" id="loadMoreBtn">הצג תוצאות נוספות</button>
+  </main>
+
   <script>
-    const RAW_SUPABASE_URL = "https://mucdqrhtmyzhwxrtushp.supabase.co";
-    const SUPABASE_ANON_KEY = "sb_publishable_xR6XiLe6scQfYjXAm6oliA_sDfIM"; // Paste full key
-    const db = window.supabase.createClient(
-      RAW_SUPABASE_URL.trim().replace(/\/rest\/v1\/?$/, "").replace(/\/+$/, ""),
-      SUPABASE_ANON_KEY.trim()
-    );
+    const CATALOG_FILE = (window.APP_CONFIG && window.APP_CONFIG.BOOKS_CATALOG_JSON) || "books_catalog.json";
+    const PAGE_SIZE = 60;
 
-    let sessionId = localStorage.getItem("lib_indexer_session");
-    if (!sessionId) { sessionId = crypto.randomUUID(); localStorage.setItem("lib_indexer_session", sessionId); }
+    let books = [];
+    let currentMatches = [];
+    let renderedCount = 0;
 
-    const colRegex = /^([a-zA-Z]+)(\d+)(_\d+)?$/;
-    const columns = new Map();
-    let latestSubs = new Map(); // "colId|shelfNum" -> latest row
-    let catalog = [];
-    let activeColId = null;
-    let isEditingExisting = false;
+    const searchInput = document.getElementById("searchInput");
+    const sectionFilter = document.getElementById("sectionFilter");
+    const resultCount = document.getElementById("resultCount");
+    const resultsList = document.getElementById("resultsList");
+    const loadMoreBtn = document.getElementById("loadMoreBtn");
 
-    const mapWrapper = document.getElementById("mapWrapper");
-    const drawer = document.getElementById("drawer");
-    const drawerTitle = document.getElementById("drawerTitle");
-    const shelfList = document.getElementById("shelfList");
-    const drawerFooter = document.getElementById("drawerFooter");
-    const stats = document.getElementById("stats");
-
-    const getShelfCount = (letter) => ["d", "e", "f", "g"].includes(letter.toLowerCase()) ? 3 : 5;
-    const formatDewey = (v) => (!v.includes(".") && /^\d{4,}/.test(v.trim())) ? v.trim().slice(0, 3) + "." + v.trim().slice(3) : v.trim();
-
-    function lookupCatalog(code, vol) {
-      if (!catalog.length || !code) return { exists: false, next: null };
-      const tVol = vol || 0;
-      let lo = 0, hi = catalog.length - 1, idx = -1;
-      while (lo <= hi) {
-        const mid = (lo + hi) >> 1, it = catalog[mid];
-        const cmp = it.code !== code ? (it.code < code ? -1 : 1) : (it.vol || 0) - tVol;
-        if (cmp === 0) { idx = mid; break; }
-        cmp < 0 ? (lo = mid + 1) : (hi = mid - 1);
-      }
-      if (idx === -1 && tVol === 0) {
-        let last = -1;
-        for (let i = lo; i < catalog.length && catalog[i].code === code; i++) last = i;
-        if (last !== -1) return { exists: true, next: catalog[last + 1] || null };
-      }
-      return idx !== -1 ? { exists: true, next: catalog[idx + 1] || null } : { exists: false, next: null };
-    }
-
-    function getColumnState(colId) {
-      const col = columns.get(colId);
-      const shelves = [];
-      for (let i = 1; i <= col.shelfCount; i++) shelves.push(latestSubs.get(`${colId}|${i}`) || null);
-      return shelves.every(Boolean) ? { status: "complete", shelves } : { status: "open" };
-    }
-
-    function getPrefillFromPrevColumn(colId) {
-      const ordered = Array.from(columns.keys()).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      const idx = ordered.indexOf(colId);
-      if (idx <= 0) return null;
-      const prevId = ordered[idx - 1];
-      const prevCol = columns.get(prevId);
-      const prevState = getColumnState(prevId);
-      if (prevState.status !== "complete") return null;
-
-      let lastSub = null;
-      for (let i = prevCol.shelfCount - 1; i >= 0; i--) {
-        if (prevState.shelves[i].status === "indexed") { lastSub = prevState.shelves[i]; break; }
-      }
-      if (!lastSub) return null;
-
-      const cat = lookupCatalog(lastSub.end_code, lastSub.end_vol || 0);
-      if (cat.exists && cat.next) return { code: cat.next.code, vol: cat.next.vol || "" };
-      if (lastSub.end_vol) return { code: lastSub.end_code, vol: lastSub.end_vol + 1 };
-      return { code: lastSub.end_code, vol: "" };
+    // Normalize Hebrew & punctuation so partial queries match regardless of geresh/niqqud/double-letters
+    function normalizeText(str) {
+      if (!str) return "";
+      return str
+        .toLowerCase()
+        .replace(/[\u0591-\u05C7]/g, "")   // strip niqqud
+        .replace(/['"׳״\-–—.,:;()[\]/\\]/g, " ")
+        .replace(/וו/g, "ו")
+        .replace(/יי/g, "י")
+        .replace(/\s+/g, " ")
+        .trim();
     }
 
     async function init() {
-      const [svgRes, catRes] = await Promise.all([
-        fetch("library_map.svg"),
-        fetch("catalog_index.json").catch(() => null),
-      ]);
-      mapWrapper.innerHTML = await svgRes.text();
-      if (catRes && catRes.ok) catalog = await catRes.json();
+      try {
+        const res = await fetch(CATALOG_FILE);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const rawBooks = await res.json();
 
-      mapWrapper.querySelectorAll("svg [id]").forEach((el) => {
-        const cleanId = el.id.trim();
-        const m = cleanId.match(colRegex);
-        if (m) {
-          columns.set(cleanId, { id: cleanId, letter: m[1], shelfCount: getShelfCount(m[1]), el });
-          el.classList.add("col-node");
-          el.style.pointerEvents = "all";
-          el.addEventListener("click", (e) => { e.stopPropagation(); openDrawer(cleanId); });
-        }
-      });
+        const sections = new Set();
+        books = rawBooks.map((b) => {
+          const normTitle = normalizeText(`${b.title || ""} ${b.alt_title || ""} ${b.in_book || ""}`);
+          const normAuthor = normalizeText(b.author || "");
+          const normSection = normalizeText(b.section || "");
+          const normAll = `${b.code} ${normTitle} ${normAuthor} ${normSection} ${normalizeText(b.publisher || "")}`;
 
-      await reloadData();
-      db.channel("live")
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "shelf_submissions" }, () => reloadData())
-        .subscribe();
-    }
+          if (b.section) sections.add(b.section);
+          return { ...b, _title: normTitle, _author: normAuthor, _all: normAll };
+        });
 
-    async function reloadData() {
-      const { data } = await db.from("shelf_submissions").select("*").order("created_at", { ascending: true });
-      if (data) {
-        latestSubs.clear();
-        for (const row of data) {
-          if (row.shelf_num >= 1) latestSubs.set(`${row.column_id}|${row.shelf_num}`, row);
-        }
+        Array.from(sections).sort((a, b) => a.localeCompare(b, "he")).forEach((sec) => {
+          const opt = document.createElement("option");
+          opt.value = sec;
+          opt.textContent = sec;
+          sectionFilter.appendChild(opt);
+        });
+
+        runSearch();
+        searchInput.focus();
+      } catch (err) {
+        resultCount.textContent = `שגיאה בטעינת הקטלוג (${err.message})`;
       }
-      refreshMap();
-      if (activeColId) renderDrawer();
     }
 
-    function refreshMap() {
-      let done = 0;
-      columns.forEach((col) => {
-        col.el.classList.remove("col-complete");
-        if (getColumnState(col.id).status === "complete") { col.el.classList.add("col-complete"); done++; }
-      });
-      stats.textContent = `${done}/${columns.size} indexed`;
+    function scoreBook(book, rawTrimmed, normQuery, tokens, isNumericQuery) {
+      if (isNumericQuery) {
+        if (book.code === rawTrimmed) return 100;
+        if (book.code.startsWith(rawTrimmed)) return 80;
+        if (book._all.includes(rawTrimmed)) return 30;
+        return 0;
+      }
+
+      // Every token must exist somewhere in the book's searchable fields
+      for (let i = 0; i < tokens.length; i++) {
+        if (!book._all.includes(tokens[i])) return 0;
+      }
+
+      let score = 20;
+      if (book._title.includes(normQuery)) score += 60;
+      else if (tokens.every((t) => book._title.includes(t))) score += 35;
+
+      if (book._author.includes(normQuery)) score += 50;
+      else if (tokens.every((t) => book._author.includes(t))) score += 25;
+
+      return score;
     }
 
-    document.getElementById("closeBtn").onclick = () => {
-      drawer.classList.add("hidden");
-      if (activeColId) columns.get(activeColId).el.classList.remove("col-selected");
-      activeColId = null;
-      isEditingExisting = false;
-    };
+    function runSearch() {
+      const rawTrimmed = searchInput.value.trim();
+      const secVal = sectionFilter.value;
+      const normQuery = normalizeText(rawTrimmed);
+      const tokens = normQuery ? normQuery.split(" ") : [];
+      const isNumericQuery = /^\d{1,3}(\.\d*)?$/.test(rawTrimmed);
 
-    function openDrawer(colId) {
-      if (activeColId) columns.get(activeColId).el.classList.remove("col-selected");
-      activeColId = colId;
-      isEditingExisting = false;
-      columns.get(colId).el.classList.add("col-selected");
-      drawerTitle.textContent = `Column ${colId.toUpperCase()}`;
-      renderDrawer();
-      drawer.classList.remove("hidden");
+      if (!normQuery && !secVal) {
+        currentMatches = books;
+      } else {
+        const scored = [];
+        for (let i = 0; i < books.length; i++) {
+          const b = books[i];
+          if (secVal && b.section !== secVal) continue;
+          if (!normQuery) {
+            scored.push({ book: b, score: 1 });
+            continue;
+          }
+          const sc = scoreBook(b, rawTrimmed, normQuery, tokens, isNumericQuery);
+          if (sc > 0) scored.push({ book: b, score: sc });
+        }
+        scored.sort((a, b) => b.score - a.score || a.book.code.localeCompare(b.book.code));
+        currentMatches = scored.map((s) => s.book);
+      }
+
+      resultsList.innerHTML = "";
+      renderedCount = 0;
+      resultCount.textContent = `נמצאו ${currentMatches.length.toLocaleString()} ספרים`;
+      renderNextBatch();
     }
 
-    function renderDrawer() {
-      const col = columns.get(activeColId);
-      const colState = getColumnState(activeColId);
-      const isComplete = colState.status === "complete";
-      const isLocked = isComplete && !isEditingExisting;
+    function renderNextBatch() {
+      const slice = currentMatches.slice(renderedCount, renderedCount + PAGE_SIZE);
+      const frag = document.createDocumentFragment();
 
-      shelfList.innerHTML = "";
-      drawerFooter.innerHTML = "";
+      for (const b of slice) {
+        const card = document.createElement("article");
+        card.className = "book-card";
 
-      const rows = Array.from({ length: col.shelfCount }, (_, i) => ({
-        num: i + 1,
-        label: `Shelf ${i + 1}`,
-        sub: colState.shelves ? colState.shelves[i] : null,
-      }));
-
-      const prevPrefill = !isComplete ? getPrefillFromPrevColumn(activeColId) : null;
-
-      rows.forEach((r, idx) => {
-        const card = document.createElement("div");
-        card.className = `shelf-card ${isComplete ? "verified" : ""}`;
-        card.dataset.num = r.num;
-        card.dataset.mode = r.sub ? r.sub.status : "indexed";
+        const tags = [];
+        if (b.publisher || b.year) tags.push(`<span class="tag">${[b.publisher, b.year].filter(Boolean).join(", ")}</span>`);
+        if (b.vols) tags.push(`<span class="tag">${b.vols} כרכים</span>`);
+        if (b.copies) tags.push(`<span class="tag">${b.copies} עותקים</span>`);
+        if (b.section) tags.push(`<span class="tag">${b.section}</span>`);
+        if (b.status) tags.push(`<span class="tag status">${b.status}</span>`);
 
         card.innerHTML = `
-          <div class="shelf-top">
-            <span>${r.label}</span>
-            <span style="font-size:11px;color:${isComplete ? "#15803d" : "#6b7280"}">${isLocked ? "Saved ✓" : "Required"}</span>
+          <div class="book-info">
+            <h2 class="book-title">${escapeHtml(b.title || "ללא כותר")}</h2>
+            ${b.alt_title ? `<div class="book-alt">${escapeHtml(b.alt_title)}</div>` : ""}
+            ${b.in_book ? `<div class="book-alt" style="direction:rtl;">בתוך: ${escapeHtml(b.in_book)}</div>` : ""}
+            ${b.author ? `<div class="book-author">${escapeHtml(b.author)}</div>` : ""}
+            <div class="book-tags">${tags.join("")}</div>
           </div>
-          <div class="inputs-row">
-            <input type="text" inputmode="decimal" class="code-in start-in" placeholder="Left 503.42" />
-            <input type="number" inputmode="numeric" min="1" class="vol-in start-vol" placeholder="Vol" />
-            <span>–</span>
-            <input type="text" inputmode="decimal" class="code-in end-in" placeholder="Right 503.89" />
-            <input type="number" inputmode="numeric" min="1" class="vol-in end-vol" placeholder="Vol" />
-          </div>
-          <div class="cat-fb"></div>
-          <div class="mode-toggles">
-            <button type="button" class="mode-btn active" data-m="indexed">Range</button>
-            <button type="button" class="mode-btn" data-m="empty">Empty</button>
-            <button type="button" class="mode-btn" data-m="unindexed">Unindexed</button>
+          <div class="code-box">
+            <span class="code-badge">${escapeHtml(b.code)}</span>
+            <span class="map-placeholder">מיקום במפה (בקרוב)</span>
           </div>
         `;
-
-        const sIn = card.querySelector(".start-in"), sVol = card.querySelector(".start-vol");
-        const eIn = card.querySelector(".end-in"), eVol = card.querySelector(".end-vol");
-        const fb = card.querySelector(".cat-fb");
-        const btns = card.querySelectorAll(".mode-btn");
-
-        // Populate existing values if present (both in locked view and when editing)
-        if (r.sub) {
-          btns.forEach((b) => b.classList.toggle("active", b.dataset.m === r.sub.status));
-          if (r.sub.status === "indexed") {
-            sIn.value = r.sub.start_code; sVol.value = r.sub.start_vol || "";
-            eIn.value = r.sub.end_code; eVol.value = r.sub.end_vol || "";
-          } else {
-            [sIn, sVol, eIn, eVol].forEach((inp) => (inp.disabled = true));
-            sIn.placeholder = r.sub.status.toUpperCase();
-          }
-        } else if (idx === 0 && prevPrefill) {
-          sIn.value = prevPrefill.code;
-          sVol.value = prevPrefill.vol;
-        }
-
-        if (isLocked) {
-          [sIn, sVol, eIn, eVol, ...btns].forEach((el) => (el.disabled = true));
-        } else {
-          btns.forEach((b) => {
-            b.onclick = () => {
-              btns.forEach((x) => x.classList.remove("active"));
-              b.classList.add("active");
-              card.dataset.mode = b.dataset.m;
-              const off = b.dataset.m !== "indexed";
-              [sIn, sVol, eIn, eVol].forEach((inp) => { inp.disabled = off; if (off) inp.value = ""; });
-              fb.textContent = "";
-              if (off) advanceFocus(r.num); else sIn.focus();
-            };
-          });
-
-          let endTouched = Boolean(r.sub);
-          sIn.oninput = () => {
-            sIn.value = formatDewey(sIn.value);
-            if (!endTouched && !eIn.value && sIn.value.includes(".")) eIn.value = sIn.value.split(".")[0] + ".";
-            if ((sIn.value.match(/\d/g) || []).length >= 5) { eIn.focus(); eIn.setSelectionRange(eIn.value.length, eIn.value.length); }
-          };
-          eIn.oninput = () => {
-            endTouched = true;
-            eIn.value = formatDewey(eIn.value);
-            const cat = lookupCatalog(eIn.value, parseInt(eVol.value, 10) || 0);
-            fb.textContent = eIn.value.length >= 6 ? (cat.exists ? (cat.next ? `✓ Next: ${cat.next.code}${cat.next.vol ? " v." + cat.next.vol : ""}` : "✓ End of catalog") : "? Not in catalog") : "";
-            if ((eIn.value.match(/\d/g) || []).length >= 5) advanceFocus(r.num);
-          };
-          eVol.oninput = () => syncNextShelf(r.num);
-          [sIn, sVol].forEach((el) => (el.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); eIn.focus(); } }));
-          [eIn, eVol].forEach((el) => (el.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); advanceFocus(r.num); } }));
-        }
-
-        shelfList.appendChild(card);
-      });
-
-      if (isLocked) {
-        const editBtn = document.createElement("button");
-        editBtn.className = "edit";
-        editBtn.textContent = "Edit / Correct Column";
-        editBtn.onclick = () => { isEditingExisting = true; renderDrawer(); };
-        drawerFooter.appendChild(editBtn);
-      } else {
-        const subBtn = document.createElement("button");
-        subBtn.className = "primary";
-        subBtn.textContent = `Save All ${col.shelfCount} Shelves`;
-        subBtn.onclick = saveColumn;
-        drawerFooter.appendChild(subBtn);
-
-        const firstEmpty = Array.from(shelfList.querySelectorAll(".start-in:not(:disabled)")).find((i) => !i.value) || shelfList.querySelector(".end-in:not(:disabled)");
-        if (firstEmpty) firstEmpty.focus();
+        frag.appendChild(card);
       }
+
+      resultsList.appendChild(frag);
+      renderedCount += slice.length;
+      loadMoreBtn.style.display = renderedCount < currentMatches.length ? "block" : "none";
     }
 
-    function syncNextShelf(num) {
-      const next = shelfList.querySelector(`.shelf-card[data-num="${num + 1}"]`);
-      if (!next || next.dataset.mode !== "indexed") return false;
-      const prev = shelfList.querySelector(`.shelf-card[data-num="${num}"]`);
-      const eCode = prev.querySelector(".end-in").value.trim();
-      const eVol = parseInt(prev.querySelector(".end-vol").value, 10) || 0;
-      const nStart = next.querySelector(".start-in"), nVol = next.querySelector(".start-vol"), nEnd = next.querySelector(".end-in");
-
-      const cat = lookupCatalog(eCode, eVol);
-      if (cat.exists && cat.next) {
-        nStart.value = cat.next.code;
-        nVol.value = cat.next.vol || "";
-        if (!nEnd.value && nStart.value.includes(".")) nEnd.value = nStart.value.split(".")[0] + ".";
-        return true;
-      }
-      if (eCode && eVol > 0) {
-        nStart.value = eCode; nVol.value = eVol + 1;
-        if (!nEnd.value && eCode.includes(".")) nEnd.value = eCode.split(".")[0] + ".";
-        return true;
-      }
-      return false;
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     }
 
-    function advanceFocus(num) {
-      const next = shelfList.querySelector(`.shelf-card[data-num="${num + 1}"]`);
-      if (next && next.dataset.mode === "indexed") {
-        const predicted = syncNextShelf(num);
-        const target = predicted ? next.querySelector(".end-in") : next.querySelector(".start-in");
-        target.focus();
-        target.setSelectionRange(target.value.length, target.value.length);
-      } else {
-        drawerFooter.querySelector("button")?.focus();
-      }
-    }
-
-    async function saveColumn() {
-      const cards = shelfList.querySelectorAll(".shelf-card");
-      const rows = [];
-      for (const c of cards) {
-        const num = parseInt(c.dataset.num, 10);
-        const mode = c.dataset.mode;
-        if (mode === "indexed") {
-          const start = c.querySelector(".start-in").value.trim();
-          const end = c.querySelector(".end-in").value.trim();
-          if (!start || !end) { alert(`Please fill out all shelves before saving (missing Shelf ${num}).`); return; }
-          rows.push({
-            column_id: activeColId, shelf_num: num, status: "indexed",
-            start_code: start, start_vol: parseInt(c.querySelector(".start-vol").value, 10) || null,
-            end_code: end, end_vol: parseInt(c.querySelector(".end-vol").value, 10) || null,
-            session_id: sessionId,
-          });
-        } else {
-          rows.push({ column_id: activeColId, shelf_num: num, status: mode, start_code: null, start_vol: null, end_code: null, end_vol: null, session_id: sessionId });
-        }
-      }
-
-      const btn = drawerFooter.querySelector("button");
-      btn.disabled = true;
-      const { error } = await db.from("shelf_submissions").insert(rows);
-      btn.disabled = false;
-      if (error) {
-        alert("Error: " + error.message);
-      } else {
-        isEditingExisting = false;
-        await reloadData();
-      }
-    }
-
-    document.getElementById("exportBtn").onclick = () => {
-      const out = [];
-      columns.forEach((col) => {
-        const st = getColumnState(col.id);
-        if (st.status === "complete") {
-          st.shelves.forEach((sub) => {
-            if (sub.status === "indexed") {
-              out.push({ column_id: col.id, shelf_num: sub.shelf_num, start: sub.start_code, start_vol: sub.start_vol, end: sub.end_code, end_vol: sub.end_vol });
-            }
-          });
-        }
-      });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 2)], { type: "application/json" }));
-      a.download = "verified_library_shelves.json";
-      a.click();
-    };
+    let debounceTimer;
+    searchInput.addEventListener("input", () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(runSearch, 120);
+    });
+    sectionFilter.addEventListener("change", runSearch);
+    document.getElementById("clearBtn").addEventListener("click", () => {
+      searchInput.value = "";
+      sectionFilter.value = "";
+      runSearch();
+      searchInput.focus();
+    });
+    loadMoreBtn.addEventListener("click", renderNextBatch);
 
     init();
   </script>
