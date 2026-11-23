@@ -82,7 +82,7 @@
     let sessionId = localStorage.getItem("lib_indexer_session");
     if (!sessionId) { sessionId = crypto.randomUUID(); localStorage.setItem("lib_indexer_session", sessionId); }
 
-    const colRegex = /^([a-zA-Z]+)(\d+)(_\d+)?$/;
+    const colRegex = /^([a-zA-Z])(\d+)(_\d+)?$/;
     const columns = new Map();
     let latestSubs = new Map(); // "colId|shelfNum" -> latest row
     let catalog = [];
